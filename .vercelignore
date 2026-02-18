@@ -1,0 +1,66 @@
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+venv/
+.venv/
+
+# Keep data files for API
+!data/stock_data.csv
+!data/model_weights.json
+!data/scaler_params.json
+
+# Development files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git files
+.git/
+.gitignore
+
+# Vercel files
+.vercel/
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Documentation
+README.md
+*.md
+
+# Training scripts (not needed on Vercel)
+scripts/
+
+# Insomnia workspace
+insomnia_workspace.json
+
+# Makefile
+Makefile
+
+# Pylint config
+pylintrc
+
+# Pyproject config
+pyproject.toml
+
+# Logs
+logs/

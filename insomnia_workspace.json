@@ -1,0 +1,212 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-02-18T20:45:00.000Z",
+  "__export_source": "insomnia.desktop.app:v2024.7.0",
+  "resources": [
+    {
+      "_id": "wrk_fiap4",
+      "parentId": null,
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Stock Price Prediction API - FIAP4",
+      "description": "API para predição de preços de ações usando modelo LSTM",
+      "scope": "collection",
+      "_type": "workspace"
+    },
+    {
+      "_id": "env_base",
+      "parentId": "wrk_fiap4",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:8081"
+      },
+      "dataPropertyOrder": {
+        "&": ["base_url"]
+      },
+      "_type": "environment"
+    },
+    {
+      "_id": "fld_general",
+      "parentId": "wrk_fiap4",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "General",
+      "description": "Endpoints gerais da API",
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_stocks",
+      "parentId": "wrk_fiap4",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Stocks",
+      "description": "Endpoints de dados históricos de ações",
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_predictions",
+      "parentId": "wrk_fiap4",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Predictions",
+      "description": "Endpoints de predição com modelo LSTM",
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_analytics",
+      "parentId": "wrk_fiap4",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Analytics",
+      "description": "Endpoints de monitoramento e métricas",
+      "_type": "request_group"
+    },
+    {
+      "_id": "req_root",
+      "parentId": "fld_general",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Root",
+      "description": "Informações gerais da API",
+      "url": "{{ _.base_url }}/",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_health",
+      "parentId": "fld_general",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Health Check",
+      "description": "Verifica o status de saúde da API",
+      "url": "{{ _.base_url }}/api/v1/health/",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_stocks_history",
+      "parentId": "fld_stocks",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Stocks History",
+      "description": "Retorna histórico de dados da ação PETR4.SA",
+      "url": "{{ _.base_url }}/api/v1/stocks/history",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "id": "param_limit",
+          "name": "limit",
+          "value": "100",
+          "description": "Número máximo de registros (1-5000)",
+          "disabled": false
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_stocks_latest",
+      "parentId": "fld_stocks",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Stocks Latest",
+      "description": "Retorna os N registros mais recentes da ação PETR4.SA",
+      "url": "{{ _.base_url }}/api/v1/stocks/latest",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "id": "param_n",
+          "name": "n",
+          "value": "30",
+          "description": "Quantidade de registros recentes (1-500)",
+          "disabled": false
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_predict",
+      "parentId": "fld_predictions",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Predict Stock Price",
+      "description": "Realiza predição de preços futuros usando o modelo LSTM",
+      "url": "{{ _.base_url }}/api/v1/predictions/predict",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"days_ahead\": 7\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_model_info",
+      "parentId": "fld_predictions",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Model Info",
+      "description": "Retorna informações detalhadas sobre o modelo LSTM",
+      "url": "{{ _.base_url }}/api/v1/predictions/model-info",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_analytics_metrics",
+      "parentId": "fld_analytics",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Analytics Metrics",
+      "description": "Retorna métricas gerais da API (requests, erros, response time)",
+      "url": "{{ _.base_url }}/api/v1/analytics/metrics",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_analytics_performance",
+      "parentId": "fld_analytics",
+      "modified": 1771457100000,
+      "created": 1771457100000,
+      "name": "Analytics Performance",
+      "description": "Retorna métricas detalhadas de performance (percentis, por endpoint)",
+      "url": "{{ _.base_url }}/api/v1/analytics/performance",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "_type": "request"
+    }
+  ]
+}
