@@ -99,7 +99,9 @@ def show_overview():
         with col2:
             data_info = health_data.get('data', {})
             records = data_info.get('total_records', 0)
-            st.metric('Registros de Dados', records)
+            last_date = data_info.get('last_date', 'N/A')
+            st.metric('Registros', records)
+            st.metric('Último Dado', last_date)
 
     if model_data:
         with col3:
@@ -109,47 +111,75 @@ def show_overview():
         with col4:
             symbol = model_data.get('symbol', 'N/A')
             st.metric('Ação', symbol)
+            
+        currency = 'R$' if symbol.endswith('.SA') else '$'
 
     # Métricas do modelo
     if model_data and model_data.get('metrics'):
         st.subheader('🤖 Métricas do Modelo LSTM')
         metrics = model_data['metrics']
+        baselines = model_data.get('baselines', {})
+        horizon = model_data.get('horizon_days', 5)
 
+        col1, col2, col3, col4 = st.columns(4)
+        
+        # Format metrics
         mape = metrics.get('mape', 0)
-        accuracy = metrics.get('accuracy', round(100 - mape, 2) if mape else 'N/A')
-        r2 = metrics.get('r2', 'N/A')
-
-        col1, col2, col3, col4, col5 = st.columns(5)
+        dir_acc = metrics.get('directional_accuracy', 0)
+        
         with col1:
-            st.metric('🎯 Acurácia', f'{accuracy}%')
+            st.metric(f'MAPE (D+{horizon})', f"{mape:.2f}%")
         with col2:
-            r2_display = f'{r2:.4f}' if isinstance(r2, (int, float)) else r2
-            st.metric('R²', r2_display)
+            st.metric('Acurácia Direcional', f"{dir_acc:.2f}%")
         with col3:
-            st.metric('MAE', f"{metrics.get('mae', 'N/A')}")
+            st.metric('MAE', f"{metrics.get('mae', 0):.4f}")
         with col4:
-            st.metric('RMSE', f"{metrics.get('rmse', 'N/A')}")
-        with col5:
-            st.metric('MAPE', f"{mape}%")
+            st.metric('RMSE', f"{metrics.get('rmse', 0):.4f}")
 
         st.info(
-            '**Acurácia** = 100% - MAPE. '
-            '**R²** (Coeficiente de Determinação): quanto da variância o modelo explica (0 a 1). '
-            '**MAE**: erro médio absoluto em R$. '
-            '**RMSE**: penaliza erros grandes. '
-            '**MAPE**: erro percentual médio.'
+            f'**Horizonte de Previsão**: {horizon} dias.\n'
+            '**Acurácia Direcional**: % de acerto na direção (sobe/desce).\n'
+            '**MAPE**: Erro percentual médio.'
         )
+        
+        if baselines:
+            st.markdown("### 📉 Comparação com Baselines")
+            naive = baselines.get('naive', {})
+            sma = list(baselines.keys())[-1] if len(baselines) > 1 else 'sma' 
+            sma_data = baselines.get(sma, {}) if sma != 'naive' else {} # simple heuristic
+            
+            # If sma key is like "sma_60", use it
+            for k in baselines:
+                if k.startswith('sma'):
+                    sma_data = baselines[k]
+                    sma = k
+                    break
+
+            b_col1, b_col2, b_col3 = st.columns(3)
+            with b_col1:
+                st.metric("LSTM MAPE", f"{mape:.2f}%")
+            with b_col2:
+                st.metric("Naive MAPE", f"{naive.get('mape_price_pct', 0):.2f}%", 
+                         delta=f"{naive.get('mape_price_pct', 0) - mape:.2f}%")
+            with b_col3:
+                st.metric(f"{sma.upper()} MAPE", f"{sma_data.get('mape_price_pct', 0):.2f}%",
+                         delta=f"{sma_data.get('mape_price_pct', 0) - mape:.2f}%")
 
         # Arquitetura do modelo
         st.subheader('🏗️ Arquitetura do Modelo')
         training_period = model_data.get('training_period', {})
         last_trained = model_data.get('last_trained', '')
+        
+        features = model_data.get('features_used', [])
+        features_str = ', '.join(features[:5]) + ('...' if len(features) > 5 else '')
+
         col1, col2 = st.columns(2)
         with col1:
             st.markdown(f"""
-            - **Tipo:** LSTM (Long Short-Term Memory)
+            - **Tipo:** LSTM Multi-Feature
             - **Sequência:** {model_data.get('sequence_length', 'N/A')} dias
-            - **Features:** {', '.join(model_data.get('features_used', ['N/A']))}
+            - **Horizonte:** {horizon} dias
+            - **Features ({len(features)}):** {features_str}
             """)
         with col2:
             st.markdown(f"""
@@ -185,7 +215,7 @@ def show_overview():
             fig.update_layout(
                 title='Preço de Fechamento - Últimos 60 dias',
                 xaxis_title='Data',
-                yaxis_title='Preço (R$)',
+                yaxis_title=f'Preço ({currency})',
                 template='plotly_dark',
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -388,6 +418,8 @@ def show_predictions():
             with col3:
                 if result.get('metrics'):
                     st.metric('MAPE do Modelo', f"{result['metrics'].get('mape', 'N/A')}%")
+            
+            currency = 'R$' if result.get('symbol', '').endswith('.SA') else '$'
 
             # Gráfico de predições
             if 'date' in pred_df.columns and 'predicted_close' in pred_df.columns:
@@ -403,7 +435,7 @@ def show_predictions():
                 fig.update_layout(
                     title=f'Predição de Preços - Próximos {days_ahead} dias',
                     xaxis_title='Data',
-                    yaxis_title='Preço Previsto (R$)',
+                    yaxis_title=f'Preço Previsto ({currency})',
                     template='plotly_dark',
                 )
                 st.plotly_chart(fig, use_container_width=True)

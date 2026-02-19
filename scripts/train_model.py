@@ -1,307 +1,399 @@
-"""
-Script de treinamento do modelo LSTM para predição de preços de ações.
-
-Este script:
-1. Baixa dados históricos da ação Petrobras (PETR4.SA) usando yfinance
-2. Pré-processa os dados com MinMaxScaler
-3. Treina um modelo LSTM com Keras/TensorFlow
-4. Avalia o modelo com métricas MAE, RMSE e MAPE
-5. Salva os pesos do modelo em JSON (para inferência com numpy)
-6. Salva os parâmetros do scaler em JSON
-7. Salva os dados históricos em CSV
-
-Uso:
-    cd fiap4
-    pip install tensorflow yfinance scikit-learn matplotlib
-    python scripts/train_model.py
-"""
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
 
 import json
-import os
-import sys
 from datetime import datetime
-
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-# TensorFlow imports
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+from sklearn.preprocessing import RobustScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import joblib
+
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow import keras
+from tensorflow.keras import layers
 
-# Configuration
-SYMBOL = 'PETR4.SA'
-START_DATE = '2018-01-01'
-END_DATE = datetime.today().strftime('%Y-%m-%d')
-SEQUENCE_LENGTH = 60
-LSTM_UNITS = 50
-EPOCHS = 100
+import matplotlib.pyplot as plt
+
+# =========================
+# CONFIG
+# =========================
+SEED = 42
+np.random.seed(SEED)
+tf.random.set_seed(SEED)
+
+SYMBOL = "AAPL"
+START_DATE = "2018-01-01"
+END_DATE = datetime.today().strftime("%Y-%m-%d")
+
+LOOKBACK = 60
+HORIZON = 1
+
+TEST_RATIO = 0.15
+VAL_RATIO = 0.15
+
+EPOCHS = 120
 BATCH_SIZE = 32
-TEST_SPLIT = 0.2
-MODEL_VERSION = '1.0.0'
 
-# Paths
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+ARTIFACTS_DIR = Path("artifacts")
+ARTIFACTS_DIR.mkdir(exist_ok=True, parents=True)
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(exist_ok=True, parents=True)
 
+# =========================
+# HELPERS
+# =========================
+def to_1d_series(x) -> pd.Series:
+    if isinstance(x, pd.DataFrame):
+        return x.iloc[:, 0]
+    return x
 
-def download_data():
-    """Download stock data from Yahoo Finance."""
-    print(f'📥 Baixando dados de {SYMBOL} ({START_DATE} a {END_DATE})...')
-    df = yf.download(SYMBOL, start=START_DATE, end=END_DATE)
+def rsi(series: pd.Series, period: int = 14) -> pd.Series:
+    delta = series.diff()
+    up = delta.clip(lower=0)
+    down = (-delta.clip(upper=0))
+    roll_up = up.rolling(period).mean()
+    roll_down = down.rolling(period).mean()
+    rs = roll_up / (roll_down + 1e-9)
+    return 100 - (100 / (1 + rs))
 
-    if df.empty:
-        print('❌ Nenhum dado encontrado!')
-        sys.exit(1)
+def build_features(df: pd.DataFrame) -> pd.DataFrame:
+    close = to_1d_series(df["Close"]).astype(float)
+    high  = to_1d_series(df["High"]).astype(float)
+    low   = to_1d_series(df["Low"]).astype(float)
+    openp = to_1d_series(df["Open"]).astype(float)
+    vol   = to_1d_series(df["Volume"]).astype(float)
 
-    # Flatten MultiIndex columns if present
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+    feats = pd.DataFrame({
+        "close": close,
+        "high": high,
+        "low": low,
+        "open": openp,
+        "volume": vol,
+    })
 
-    print(f'✅ {len(df)} registros baixados')
-    return df
+    feats["ret_1"] = feats["close"].pct_change()
+    feats["log_ret_1"] = np.log(feats["close"]).diff()
 
+    feats["sma_7"]  = feats["close"].rolling(7).mean()
+    feats["sma_21"] = feats["close"].rolling(21).mean()
+    feats["ema_12"] = feats["close"].ewm(span=12, adjust=False).mean()
+    feats["ema_26"] = feats["close"].ewm(span=26, adjust=False).mean()
 
-def prepare_data(df):
-    """Prepare data for LSTM training."""
-    print('🔧 Preparando dados...')
+    feats["macd"] = feats["ema_12"] - feats["ema_26"]
+    feats["macd_signal"] = feats["macd"].ewm(span=9, adjust=False).mean()
 
-    close_prices = df['Close'].values.reshape(-1, 1)
+    feats["rsi_14"] = rsi(feats["close"], 14)
 
-    # Normalize
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(close_prices)
+    feats["vol_7"]  = feats["ret_1"].rolling(7).std()
+    feats["vol_21"] = feats["ret_1"].rolling(21).std()
 
-    # Create sequences
-    X, y = [], []
-    for i in range(SEQUENCE_LENGTH, len(scaled_data)):
-        X.append(scaled_data[i - SEQUENCE_LENGTH:i, 0])
-        y.append(scaled_data[i, 0])
+    feats = feats.dropna().copy()
 
-    X = np.array(X)
-    y = np.array(y)
+    feats["close_t"] = feats["close"]
+    feats["close_t_h"] = feats["close"].shift(-HORIZON)
 
-    # Reshape for LSTM: (samples, time_steps, features)
-    X = X.reshape(X.shape[0], X.shape[1], 1)
+    # ✅ TARGET ROBUSTO: delta em dólares
+    feats["y_delta_h"] = feats["close_t_h"] - feats["close_t"]
 
-    # Split into train/test
-    split_idx = int(len(X) * (1 - TEST_SPLIT))
-    X_train, X_test = X[:split_idx], X[split_idx:]
-    y_train, y_test = y[:split_idx], y[split_idx:]
+    feats = feats.dropna().copy()
+    return feats
 
-    print(f'  Train: {len(X_train)} samples, Test: {len(X_test)} samples')
-
-    return X_train, X_test, y_train, y_test, scaler
-
-
-def build_model():
-    """Build LSTM model."""
-    print('🏗️  Construindo modelo LSTM...')
-
-    model = Sequential([
-        LSTM(LSTM_UNITS, return_sequences=True, input_shape=(SEQUENCE_LENGTH, 1)),
-        Dropout(0.2),
-        LSTM(LSTM_UNITS, return_sequences=False),
-        Dropout(0.2),
-        Dense(25),
-        Dense(1)
-    ])
-
-    model.compile(optimizer='adam', loss='mean_squared_error')
-    model.summary()
-
-    return model
-
-
-def train_model(model, X_train, y_train, X_test, y_test):
-    """Train the LSTM model."""
-    print('🚀 Treinando modelo...')
-
-    early_stop = EarlyStopping(
-        monitor='val_loss',
-        patience=10,
-        restore_best_weights=True,
-        verbose=1
+def make_windows(X_all, y_all, close_t, close_t_h, dates, lookback):
+    Xw, yw, c_t, c_th, dt = [], [], [], [], []
+    n = len(X_all)
+    for t in range(lookback - 1, n):
+        Xw.append(X_all[t - lookback + 1:t + 1, :])
+        yw.append(y_all[t])
+        c_t.append(close_t[t])
+        c_th.append(close_t_h[t])
+        dt.append(dates[t])
+    return (
+        np.array(Xw, dtype=np.float32),
+        np.array(yw, dtype=np.float32).reshape(-1, 1),
+        np.array(c_t, dtype=np.float32).reshape(-1, 1),
+        np.array(c_th, dtype=np.float32).reshape(-1, 1),
+        pd.to_datetime(np.array(dt)),
     )
 
-    history = model.fit(
-        X_train, y_train,
-        batch_size=BATCH_SIZE,
-        epochs=EPOCHS,
-        validation_data=(X_test, y_test),
-        callbacks=[early_stop],
-        verbose=1
-    )
+def metrics_price(y_true_price, y_pred_price):
+    mae = mean_absolute_error(y_true_price, y_pred_price)
+    rmse = np.sqrt(mean_squared_error(y_true_price, y_pred_price))
+    mape = np.mean(np.abs((y_true_price - y_pred_price) / (y_true_price + 1e-9))) * 100
+    return mae, rmse, mape
 
-    return history
+def directional_accuracy_price(true_price, pred_price, close_t):
+    true_sign = np.sign((true_price - close_t).reshape(-1))
+    pred_sign = np.sign((pred_price - close_t).reshape(-1))
+    return float((true_sign == pred_sign).mean() * 100)
 
+# =========================
+# 1) DOWNLOAD
+# =========================
+print(f"Downloading {SYMBOL}...")
+df = yf.download(SYMBOL, start=START_DATE, end=END_DATE)
 
-def evaluate_model(model, X_test, y_test, scaler):
-    """Evaluate model and calculate metrics."""
-    print('📊 Avaliando modelo...')
+# Clean data: remove rows with 0 or NaN
+df = df.dropna()
+col_check = ["Open", "High", "Low", "Close", "Volume"]
+# Handle MultiIndex if present
+if isinstance(df.columns, pd.MultiIndex):
+    # Check if we can flatten or just access via level
+    pass # Flattening happens in save_artifacts logic usually, but here we work with raw df
+    
+# Simple cleaning: if any row has 0 in OHLC, drop it
+# Accessing columns securely considering yfinance structures
+try:
+    # If MultiIndex with Ticker
+    mask = (df["Close"] > 0) & (df["Open"] > 0) & (df["High"] > 0) & (df["Low"] > 0)
+    # If it's a series or dataframe, ensure we get a boolean series for indexing
+    if isinstance(mask, pd.DataFrame):
+        mask = mask.iloc[:, 0]
+    df = df[mask]
+except Exception as e:
+    print(f"Warning during cleaning: {e}")
 
-    predictions = model.predict(X_test)
+print(df.head())
+print(df.shape)
+print(df.columns)
 
-    # Denormalize
-    predictions_denorm = scaler.inverse_transform(predictions)
-    y_test_denorm = scaler.inverse_transform(y_test.reshape(-1, 1))
+# =========================
+# 2) FEATURES + TARGET
+# =========================
+feats = build_features(df)
 
-    # Calculate metrics
-    mae = mean_absolute_error(y_test_denorm, predictions_denorm)
-    rmse = np.sqrt(mean_squared_error(y_test_denorm, predictions_denorm))
-    mape = np.mean(np.abs((y_test_denorm - predictions_denorm) / y_test_denorm)) * 100
-    r2 = r2_score(y_test_denorm, predictions_denorm)
+feature_cols = [
+    "close", "high", "low", "open", "volume",
+    "ret_1", "log_ret_1",
+    "sma_7", "sma_21", "ema_12", "ema_26",
+    "macd", "macd_signal",
+    "rsi_14",
+    "vol_7", "vol_21"
+]
+target_col = "y_delta_h"
 
-    metrics = {
-        'mae': round(float(mae), 4),
-        'rmse': round(float(rmse), 4),
-        'mape': round(float(mape), 4),
-        'r2': round(float(r2), 4),
-        'accuracy': round(float(100 - mape), 4)
+X_raw = feats[feature_cols].values
+y_raw = feats[[target_col]].values
+close_t = feats[["close_t"]].values
+close_t_h = feats[["close_t_h"]].values
+dates = feats.index.values
+
+print("Feature shape:", X_raw.shape, "Target shape:", y_raw.shape)
+
+# =========================
+# 3) SPLIT TEMPORAL
+# =========================
+n_total = len(feats)
+n_test = int(n_total * TEST_RATIO)
+n_val  = int(n_total * VAL_RATIO)
+n_train = n_total - n_val - n_test
+
+train_end_idx = n_train - 1
+val_end_idx = n_train + n_val - 1
+train_end_date = feats.index[train_end_idx]
+val_end_date = feats.index[val_end_idx]
+
+print("Split dates:")
+print(f"  train end: {train_end_date.date()}  (n={n_train})")
+print(f"  val end  : {val_end_date.date()}    (n={n_val})")
+print(f"  test     : {feats.index[val_end_idx+1].date()} -> {feats.index[-1].date()} (n={n_test})")
+
+# =========================
+# 4) SCALING sem vazamento
+# =========================
+scaler_X = RobustScaler()
+scaler_y = RobustScaler()
+
+X_scaled = np.vstack([
+    scaler_X.fit_transform(X_raw[:n_train]),
+    scaler_X.transform(X_raw[n_train:])
+])
+
+y_scaled = np.vstack([
+    scaler_y.fit_transform(y_raw[:n_train]),
+    scaler_y.transform(y_raw[n_train:])
+])
+
+# =========================
+# 5) WINDOWS
+# =========================
+Xw, yw, c_t_w, c_th_w, dt_w = make_windows(X_scaled, y_scaled, close_t, close_t_h, dates, LOOKBACK)
+
+train_mask = dt_w <= train_end_date
+val_mask   = (dt_w > train_end_date) & (dt_w <= val_end_date)
+test_mask  = dt_w > val_end_date
+
+X_train, y_train = Xw[train_mask], yw[train_mask]
+X_val, y_val     = Xw[val_mask], yw[val_mask]
+X_test, y_test   = Xw[test_mask], yw[test_mask]
+
+c_t_test  = c_t_w[test_mask]
+c_th_test = c_th_w[test_mask]
+dt_test   = dt_w[test_mask]
+
+print("Window shapes:")
+print("  X_train", X_train.shape, "y_train", y_train.shape)
+print("  X_val  ", X_val.shape,   "y_val  ", y_val.shape)
+print("  X_test ", X_test.shape,  "y_test ", y_test.shape)
+
+n_features = X_train.shape[-1]
+
+# =========================
+# 6) MODEL
+# =========================
+model = keras.Sequential([
+    layers.Input(shape=(LOOKBACK, n_features)),
+    layers.LSTM(64, return_sequences=True, recurrent_dropout=0.05),
+    layers.Dropout(0.2),
+    layers.LSTM(32, recurrent_dropout=0.05),
+    layers.Dropout(0.2),
+    layers.Dense(16, activation="relu"),
+    layers.Dense(1)
+])
+
+opt = keras.optimizers.Adam(learning_rate=5e-4, clipnorm=1.0)
+model.compile(optimizer=opt, loss=keras.losses.Huber(delta=1.0))
+model.summary()
+
+callbacks = [
+    keras.callbacks.EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True),
+    keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=4, min_lr=1e-6),
+    keras.callbacks.ModelCheckpoint(str(ARTIFACTS_DIR / "best_model.keras"), monitor="val_loss", save_best_only=True),
+]
+
+history = model.fit(
+    X_train, y_train,
+    validation_data=(X_val, y_val),
+    epochs=EPOCHS,
+    batch_size=BATCH_SIZE,
+    callbacks=callbacks,
+    verbose=1
+)
+
+# =========================
+# 7) PREDICT + inverse scale
+# =========================
+y_pred_scaled = model.predict(X_test, verbose=0)
+pred_delta = scaler_y.inverse_transform(y_pred_scaled)
+true_delta = scaler_y.inverse_transform(y_test)
+
+# reconstrói preço futuro
+pred_price = c_t_test + pred_delta
+true_price = c_th_test
+
+# =========================
+# 8) METRICS
+# =========================
+mae, rmse, mape = metrics_price(true_price, pred_price)
+dir_acc = directional_accuracy_price(true_price, pred_price, c_t_test)
+
+print(f"\n=== MODEL (LSTM) METRICS (D+{HORIZON}) ===")
+print(f"MAE (price) : {mae:.4f}")
+print(f"RMSE (price): {rmse:.4f}")
+print(f"MAPE (%)    : {mape:.2f}%")
+print(f"Dir Acc (%) : {dir_acc:.2f}%")
+
+# =========================
+# 9) BASELINES
+# =========================
+naive_pred = c_t_test
+naive_mae, naive_rmse, naive_mape = metrics_price(true_price, naive_pred)
+
+close_series = feats["close"].copy()
+sma_lb = close_series.rolling(LOOKBACK).mean()
+sma_pred = sma_lb.loc[dt_test].values.reshape(-1, 1)
+sma_pred = np.where(np.isnan(sma_pred), naive_pred, sma_pred)
+sma_mae, sma_rmse, sma_mape = metrics_price(true_price, sma_pred)
+
+print(f"\n=== BASELINES (D+{HORIZON}) ===")
+print(f"Naive  -> MAE: {naive_mae:.4f} | RMSE: {naive_rmse:.4f} | MAPE: {naive_mape:.2f}%")
+print(f"SMA{LOOKBACK:02d} -> MAE: {sma_mae:.4f} | RMSE: {sma_rmse:.4f} | MAPE: {sma_mape:.2f}%")
+
+# =========================
+# 10) PLOTS
+# =========================
+plt.figure(figsize=(10, 4))
+plt.plot(history.history["loss"], label="loss")
+plt.plot(history.history["val_loss"], label="val_loss")
+plt.title("Training curves (Huber)")
+plt.legend()
+plt.tight_layout()
+plt.savefig(ARTIFACTS_DIR / "training_curves.png", dpi=150)
+plt.close()
+
+plt.figure(figsize=(12, 4))
+plt.plot(true_price, label=f"Real Close (t+{HORIZON})")
+plt.plot(pred_price, label=f"Pred Close (t+{HORIZON})")
+plt.title(f"{SYMBOL} - Real vs Pred (D+{HORIZON})")
+plt.legend()
+plt.tight_layout()
+plt.savefig(ARTIFACTS_DIR / "real_vs_pred_price.png", dpi=150)
+plt.close()
+
+labels = ["LSTM", "Naive", f"SMA{LOOKBACK}"]
+mapes = [mape, naive_mape, sma_mape]
+plt.figure(figsize=(8, 4))
+plt.bar(labels, mapes)
+plt.title(f"MAPE (%) comparison - D+{HORIZON}")
+plt.tight_layout()
+plt.savefig(ARTIFACTS_DIR / "mape_comparison.png", dpi=150)
+plt.close()
+
+# =========================
+# 11) SAVE ARTIFACTS
+# =========================
+model.save(ARTIFACTS_DIR / "final_model.keras")
+joblib.dump(scaler_X, ARTIFACTS_DIR / "scaler_X.joblib")
+joblib.dump(scaler_y, ARTIFACTS_DIR / "scaler_y.joblib")
+
+# Save stock data CSV for the API stock repository
+csv_path = DATA_DIR / "stock_data.csv"
+df_save = df.copy()
+if isinstance(df_save.columns, pd.MultiIndex):
+    df_save.columns = df_save.columns.get_level_values(0)
+df_save.index.name = "Date"
+df_save.reset_index(inplace=True)
+df_save["Date"] = df_save["Date"].dt.strftime("%Y-%m-%d")
+df_save.to_csv(csv_path, index=False)
+print(f"  ✅ Stock data CSV: {csv_path} ({len(df_save)} registros)")
+
+metadata = {
+    "symbol": SYMBOL,
+    "start_date": START_DATE,
+    "end_date": END_DATE,
+    "lookback": LOOKBACK,
+    "horizon_days": HORIZON,
+    "features": feature_cols,
+    "target": f"delta_close = close_(t+{HORIZON}) - close_t",
+    "trained_at": datetime.now().isoformat(),
+    "splits": {"train_rows": int(n_train), "val_rows": int(n_val), "test_rows": int(n_test)},
+    "notes": {
+        "why_delta": "delta makes the target more stationary than raw price; evaluation still in price",
+        "cudnn_note": "recurrent_dropout used to avoid cuDNN path for compatibility"
     }
+}
+with open(ARTIFACTS_DIR / "metadata.json", "w", encoding="utf-8") as f:
+    json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-    print(f'  MAE:  {metrics["mae"]:.4f}')
-    print(f'  RMSE: {metrics["rmse"]:.4f}')
-    print(f'  MAPE: {metrics["mape"]:.4f}%')
-    print(f'  R²:   {metrics["r2"]:.4f}')
-    print(f'  Acurácia: {metrics["accuracy"]:.4f}%')
-
-    return metrics
-
-
-def extract_weights(model):
-    """Extract model weights for numpy inference."""
-    print('💾 Extraindo pesos do modelo...')
-
-    weights = {}
-
-    # Get LSTM layers (we have 2 LSTM layers)
-    lstm_layers = [layer for layer in model.layers if isinstance(layer, tf.keras.layers.LSTM)]
-    dense_layers = [layer for layer in model.layers if isinstance(layer, tf.keras.layers.Dense)]
-
-    # For simplicity, we'll use only the last LSTM and last Dense for inference
-    # The full model has: LSTM -> Dropout -> LSTM -> Dropout -> Dense(25) -> Dense(1)
-    # We'll extract all needed weights
-
-    # First LSTM layer
-    lstm1_weights = lstm_layers[0].get_weights()
-    weights['lstm1'] = {
-        'kernel': lstm1_weights[0].tolist(),
-        'recurrent': lstm1_weights[1].tolist(),
-        'bias': lstm1_weights[2].tolist()
+metrics_out = {
+    "model": {
+        "mae_price": float(mae),
+        "rmse_price": float(rmse),
+        "mape_price_pct": float(mape),
+        "directional_accuracy_pct": float(dir_acc),
+    },
+    "baselines": {
+        "naive": {"mae_price": float(naive_mae), "rmse_price": float(naive_rmse), "mape_price_pct": float(naive_mape)},
+        f"sma_{LOOKBACK}": {"mae_price": float(sma_mae), "rmse_price": float(sma_rmse), "mape_price_pct": float(sma_mape)},
     }
+}
+with open(ARTIFACTS_DIR / "metrics.json", "w", encoding="utf-8") as f:
+    json.dump(metrics_out, f, indent=2, ensure_ascii=False)
 
-    # Second LSTM layer
-    lstm2_weights = lstm_layers[1].get_weights()
-    weights['lstm'] = {
-        'kernel': lstm2_weights[0].tolist(),
-        'recurrent': lstm2_weights[1].tolist(),
-        'bias': lstm2_weights[2].tolist()
-    }
-
-    # Dense layers
-    dense1_weights = dense_layers[0].get_weights()
-    weights['dense1'] = {
-        'kernel': dense1_weights[0].tolist(),
-        'bias': dense1_weights[1].tolist()
-    }
-
-    dense2_weights = dense_layers[1].get_weights()
-    weights['dense'] = {
-        'kernel': dense2_weights[0].tolist(),
-        'bias': dense2_weights[1].tolist()
-    }
-
-    return weights
-
-
-def save_artifacts(df, weights, scaler, metrics):
-    """Save model artifacts to data directory."""
-    print('💾 Salvando artefatos...')
-
-    os.makedirs(DATA_DIR, exist_ok=True)
-
-    # Save stock data CSV
-    csv_path = os.path.join(DATA_DIR, 'stock_data.csv')
-    df_save = df.copy()
-    df_save.index.name = 'Date'
-    df_save.reset_index(inplace=True)
-    df_save['Date'] = df_save['Date'].dt.strftime('%Y-%m-%d')
-    df_save.to_csv(csv_path, index=False)
-    print(f'  ✅ Dados salvos: {csv_path} ({len(df_save)} registros)')
-
-    # Save model weights
-    weights_path = os.path.join(DATA_DIR, 'model_weights.json')
-    model_data = {
-        'version': MODEL_VERSION,
-        'symbol': SYMBOL,
-        'sequence_length': SEQUENCE_LENGTH,
-        'lstm_units': LSTM_UNITS,
-        'training_start': START_DATE,
-        'training_end': END_DATE,
-        'trained_at': datetime.now().isoformat(),
-        'metrics': metrics,
-        **weights
-    }
-
-    with open(weights_path, 'w') as f:
-        json.dump(model_data, f)
-    print(f'  ✅ Pesos do modelo salvos: {weights_path}')
-
-    # Save scaler parameters
-    scaler_path = os.path.join(DATA_DIR, 'scaler_params.json')
-    scaler_data = {
-        'min': float(scaler.data_min_[0]),
-        'max': float(scaler.data_max_[0]),
-        'feature_range': [0, 1]
-    }
-
-    with open(scaler_path, 'w') as f:
-        json.dump(scaler_data, f, indent=2)
-    print(f'  ✅ Parâmetros do scaler salvos: {scaler_path}')
-
-
-def main():
-    """Main training pipeline."""
-    print('=' * 60)
-    print(f'  LSTM Stock Price Predictor - Training Pipeline')
-    print(f'  Symbol: {SYMBOL} | Period: {START_DATE} to {END_DATE}')
-    print('=' * 60)
-    print()
-
-    # Step 1: Download data
-    df = download_data()
-
-    # Step 2: Prepare data
-    X_train, X_test, y_train, y_test, scaler = prepare_data(df)
-
-    # Step 3: Build model
-    model = build_model()
-
-    # Step 4: Train model
-    history = train_model(model, X_train, y_train, X_test, y_test)
-
-    # Step 5: Evaluate model
-    metrics = evaluate_model(model, X_test, y_test, scaler)
-
-    # Step 6: Extract weights
-    weights = extract_weights(model)
-
-    # Step 7: Save everything
-    save_artifacts(df, weights, scaler, metrics)
-
-    print()
-    print('=' * 60)
-    print('  ✅ Treinamento concluído com sucesso!')
-    print(f'  📊 MAE: {metrics["mae"]:.4f} | RMSE: {metrics["rmse"]:.4f} | MAPE: {metrics["mape"]:.4f}%')
-    print('  📁 Artefatos salvos em: data/')
-    print('  🚀 Execute "make dev" para iniciar a API')
-    print('=' * 60)
-
-
-if __name__ == '__main__':
-    main()
+print("\nArtifacts saved in:", ARTIFACTS_DIR.resolve())
+for p in sorted(ARTIFACTS_DIR.glob("*")):
+    print(" -", p)

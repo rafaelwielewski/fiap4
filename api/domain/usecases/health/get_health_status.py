@@ -16,7 +16,8 @@ class GetHealthStatusUseCase:
                 'message': 'API funcionando corretamente',
                 'data': {
                     'data_loaded': True,
-                    'total_records': len(data)
+                    'total_records': len(data),
+                    'last_date': data[-1].date if data else 'N/A'
                 }
             }
         except FileNotFoundError:

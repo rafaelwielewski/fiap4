@@ -4,226 +4,258 @@ from datetime import datetime, timedelta
 from typing import List
 
 import numpy as np
+import pandas as pd
+import joblib
 
-from api.domain.models.prediction import PredictionResponse, PredictedPrice, ModelInfo, ModelMetrics
+from api.domain.models.prediction import PredictionResponse, PredictedPrice
 from api.domain.models.stock import StockData
 from api.domain.repositories.stock_repository import StockRepository
 from api.utils.logger import logger
 
 
 class PredictStockPriceUseCase:
-    """Use case for predicting stock prices using pre-trained LSTM model."""
+    """Use case for predicting stock prices using the new multi-feature LSTM model."""
 
     def __init__(self, stock_repository: StockRepository):
         self.repository = stock_repository
-        self.model_weights = None
-        self.scaler_params = None
-        self.sequence_length = 60
+        self.model = None
+        self.scaler_X = None
+        self.scaler_y = None
+        self.metadata = None
+        self.metrics = None
+        self.lookback = 60
+        self.horizon = 5
         self._load_model()
 
     def _load_model(self):
-        """Load pre-trained model weights and scaler parameters."""
+        """Load keras model, scalers, and metadata from artifacts/."""
         try:
-            weights_path = os.path.join('data', 'model_weights.json')
-            scaler_path = os.path.join('data', 'scaler_params.json')
+            artifacts_dir = os.path.join('artifacts')
 
-            with open(weights_path, 'r') as f:
-                self.model_weights = json.load(f)
+            # Load keras model
+            os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+            import tensorflow as tf
+            model_path = os.path.join(artifacts_dir, 'final_model.keras')
+            self.model = tf.keras.models.load_model(model_path)
 
-            with open(scaler_path, 'r') as f:
-                self.scaler_params = json.load(f)
+            # Load scalers
+            self.scaler_X = joblib.load(os.path.join(artifacts_dir, 'scaler_X.joblib'))
+            self.scaler_y = joblib.load(os.path.join(artifacts_dir, 'scaler_y.joblib'))
 
-            logger.info('Modelo LSTM carregado com sucesso')
+            # Load metadata
+            with open(os.path.join(artifacts_dir, 'metadata.json'), 'r') as f:
+                self.metadata = json.load(f)
+
+            self.lookback = self.metadata.get('lookback', 60)
+            self.horizon = self.metadata.get('horizon_days', 5)
+
+            # Load metrics
+            metrics_path = os.path.join(artifacts_dir, 'metrics.json')
+            if os.path.exists(metrics_path):
+                with open(metrics_path, 'r') as f:
+                    self.metrics = json.load(f)
+
+            logger.info('Modelo LSTM (keras) carregado com sucesso')
         except Exception as e:
             logger.error(f'Erro ao carregar modelo: {str(e)}')
-            self.model_weights = None
-            self.scaler_params = None
+            self.model = None
 
-    def _normalize(self, data: np.ndarray) -> np.ndarray:
-        """Normalize data using saved scaler parameters."""
-        min_val = self.scaler_params['min']
-        max_val = self.scaler_params['max']
-        if max_val - min_val == 0:
-            return np.zeros_like(data)
-        return (data - min_val) / (max_val - min_val)
+    @staticmethod
+    def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
+        """Calculate RSI indicator."""
+        delta = series.diff()
+        up = delta.clip(lower=0)
+        down = (-delta.clip(upper=0))
+        roll_up = up.rolling(period).mean()
+        roll_down = down.rolling(period).mean()
+        rs = roll_up / (roll_down + 1e-9)
+        return 100 - (100 / (1 + rs))
 
-    def _denormalize(self, data: np.ndarray) -> np.ndarray:
-        """Denormalize data back to original scale."""
-        min_val = self.scaler_params['min']
-        max_val = self.scaler_params['max']
-        return data * (max_val - min_val) + min_val
+    @staticmethod
+    def _build_features_from_df(df: pd.DataFrame) -> pd.DataFrame:
+        """Build the same 16 features used during training."""
+        feats = pd.DataFrame({
+            'close': df['close'].astype(float),
+            'high': df['high'].astype(float),
+            'low': df['low'].astype(float),
+            'open': df['open'].astype(float),
+            'volume': df['volume'].astype(float),
+        })
 
-    def _sigmoid(self, x: np.ndarray) -> np.ndarray:
-        """Sigmoid activation function."""
-        return 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500)))
+        feats['ret_1'] = feats['close'].pct_change()
+        feats['log_ret_1'] = np.log(feats['close']).diff()
 
-    def _tanh(self, x: np.ndarray) -> np.ndarray:
-        """Tanh activation function."""
-        return np.tanh(x)
+        feats['sma_7'] = feats['close'].rolling(7).mean()
+        feats['sma_21'] = feats['close'].rolling(21).mean()
+        feats['ema_12'] = feats['close'].ewm(span=12, adjust=False).mean()
+        feats['ema_26'] = feats['close'].ewm(span=26, adjust=False).mean()
 
-    def _lstm_layer_forward(self, x_sequence: np.ndarray, layer_key: str, return_sequences: bool = False) -> np.ndarray:
-        """Forward pass through a single LSTM layer using saved weights."""
-        weights = self.model_weights[layer_key]
+        feats['macd'] = feats['ema_12'] - feats['ema_26']
+        feats['macd_signal'] = feats['macd'].ewm(span=9, adjust=False).mean()
 
-        W = np.array(weights['kernel'])        # (input_size, 4 * units)
-        U = np.array(weights['recurrent'])     # (units, 4 * units)
-        b = np.array(weights['bias'])           # (4 * units,)
+        feats['rsi_14'] = PredictStockPriceUseCase._rsi(feats['close'], 14)
 
-        units = U.shape[0]
-        h = np.zeros(units)
-        c = np.zeros(units)
+        feats['vol_7'] = feats['ret_1'].rolling(7).std()
+        feats['vol_21'] = feats['ret_1'].rolling(21).std()
 
-        outputs = []
+        feats = feats.dropna()
+        return feats
 
-        for t in range(x_sequence.shape[0]):
-            x_t = x_sequence[t]
-
-            z = np.dot(x_t, W) + np.dot(h, U) + b
-
-            i = self._sigmoid(z[:units])
-            f = self._sigmoid(z[units:2 * units])
-            c_candidate = self._tanh(z[2 * units:3 * units])
-            o = self._sigmoid(z[3 * units:])
-
-            c = f * c + i * c_candidate
-            h = o * self._tanh(c)
-
-            if return_sequences:
-                outputs.append(h.copy())
-
-        if return_sequences:
-            return np.array(outputs)
-        return h
-
-    def _dense_forward(self, x: np.ndarray, layer_key: str, activation: str = None) -> np.ndarray:
-        """Forward pass through a dense layer."""
-        weights = self.model_weights[layer_key]
-        W = np.array(weights['kernel'])
-        b = np.array(weights['bias'])
-        output = np.dot(x, W) + b
-
-        if activation == 'relu':
-            output = np.maximum(0, output)
-
-        return output
-
-    def _predict_single(self, sequence: np.ndarray) -> float:
-        """Predict a single value from a sequence.
-
-        Model architecture: LSTM1(return_sequences=True) -> LSTM2 -> Dense(25) -> Dense(1)
-        Dropout layers are skipped during inference.
+    def _predict_future(self, feature_df: pd.DataFrame, last_date: str, days_ahead: int) -> List[PredictedPrice]:
         """
-        # First LSTM layer (return_sequences=True)
-        lstm1_output = self._lstm_layer_forward(sequence, 'lstm1', return_sequences=True)
+        Generate predictions for the next N days.
 
-        # Second LSTM layer (return_sequences=False)
-        lstm2_output = self._lstm_layer_forward(lstm1_output, 'lstm', return_sequences=False)
+        Since the model predicts delta for HORIZON days ahead,
+        we step forward in HORIZON-day chunks.
+        """
+        feature_cols = [
+            'close', 'high', 'low', 'open', 'volume',
+            'ret_1', 'log_ret_1',
+            'sma_7', 'sma_21', 'ema_12', 'ema_26',
+            'macd', 'macd_signal',
+            'rsi_14',
+            'vol_7', 'vol_21'
+        ]
 
-        # Dense(25)
-        dense1_output = self._dense_forward(lstm2_output, 'dense1')
+        X_raw = feature_df[feature_cols].values
+        X_scaled = self.scaler_X.transform(X_raw)
 
-        # Dense(1)
-        prediction = self._dense_forward(dense1_output, 'dense')
-
-        return float(prediction[0])
-
-    def execute(self, days_ahead: int = 7) -> PredictionResponse:
-        """Execute the prediction use case."""
-        if self.model_weights is None or self.scaler_params is None:
-            raise ValueError('Modelo não carregado. Execute o script de treinamento primeiro.')
-
-        latest_data = self.repository.get_latest_data(self.sequence_length)
-
-        if len(latest_data) < self.sequence_length:
+        # We need at least lookback rows
+        if len(X_scaled) < self.lookback:
             raise ValueError(
-                f'Dados insuficientes. Necessário: {self.sequence_length}, disponível: {len(latest_data)}'
+                f'Dados insuficientes após feature engineering. '
+                f'Necessário: {self.lookback}, disponível: {len(X_scaled)}'
             )
 
-        close_prices = np.array([d.close for d in latest_data])
-        normalized = self._normalize(close_prices).reshape(-1, 1)
-
         predictions = []
-        current_sequence = normalized.copy()
+        current_date = datetime.strptime(last_date, '%Y-%m-%d')
+        current_close = float(feature_df['close'].iloc[-1])
 
-        current_date = datetime.strptime(latest_data[-1].date, '%Y-%m-%d')
+        # Use the last lookback rows as the initial sequence
+        sequence = X_scaled[-self.lookback:]
 
-        for i in range(days_ahead):
-            pred_normalized = self._predict_single(current_sequence)
-            pred_price = self._denormalize(np.array([pred_normalized]))[0]
+        steps = (days_ahead + self.horizon - 1) // self.horizon  # ceiling division
+        for step in range(steps):
+            input_seq = sequence[-self.lookback:].reshape(1, self.lookback, len(feature_cols))
+            pred_delta_scaled = self.model.predict(input_seq, verbose=0)
+            pred_delta = self.scaler_y.inverse_transform(pred_delta_scaled)[0][0]
+            pred_price = current_close + float(pred_delta)
 
-            # Move to next business day
-            current_date += timedelta(days=1)
-            while current_date.weekday() >= 5:
-                current_date += timedelta(days=1)
+            # Advance by horizon days (business days)
+            target_date = current_date
+            for _ in range(self.horizon):
+                target_date += timedelta(days=1)
+                while target_date.weekday() >= 5:
+                    target_date += timedelta(days=1)
 
             predictions.append(PredictedPrice(
-                date=current_date.strftime('%Y-%m-%d'),
-                predicted_close=round(float(pred_price), 2)
+                date=target_date.strftime('%Y-%m-%d'),
+                predicted_close=round(pred_price, 2)
             ))
 
-            # Update sequence for next prediction
-            new_entry = np.array([[pred_normalized]])
-            current_sequence = np.vstack([current_sequence[1:], new_entry])
+            if len(predictions) >= days_ahead:
+                break
+
+            # Update for next step
+            current_close = pred_price
+            current_date = target_date
+
+            # Shift the sequence forward (approximate: repeat last row with updated close)
+            new_row = sequence[-1].copy()
+            sequence = np.vstack([sequence[1:], new_row.reshape(1, -1)])
+
+        return predictions[:days_ahead]
+
+    def execute(self, days_ahead: int = 7) -> PredictionResponse:
+        """Execute prediction using pre-loaded stock data."""
+        if self.model is None:
+            raise ValueError('Modelo não carregado. Execute o script de treinamento primeiro.')
+
+        # Get enough data for features (need ~30 extra rows for indicators like SMA21)
+        needed = self.lookback + 30
+        latest_data = self.repository.get_latest_data(needed)
+
+        if len(latest_data) < needed:
+            raise ValueError(
+                f'Dados insuficientes. Necessário: {needed}, disponível: {len(latest_data)}'
+            )
+
+        # Convert to DataFrame
+        df = pd.DataFrame([{
+            'date': d.date, 'open': d.open, 'high': d.high,
+            'low': d.low, 'close': d.close, 'volume': d.volume
+        } for d in latest_data])
+
+        # Build features
+        feature_df = self._build_features_from_df(df)
+        last_date = latest_data[-1].date
+
+        predictions = self._predict_future(feature_df, last_date, days_ahead)
+
+        # Build metrics response
+        metrics_dict = {}
+        if self.metrics and 'model' in self.metrics:
+            m = self.metrics['model']
+            metrics_dict = {
+                'mae': m.get('mae_price', 0),
+                'rmse': m.get('rmse_price', 0),
+                'mape': m.get('mape_price_pct', 0),
+                'directional_accuracy': m.get('directional_accuracy_pct', 0),
+            }
+
+        symbol = self.metadata.get('symbol', 'AAPL') if self.metadata else 'AAPL'
 
         return PredictionResponse(
-            symbol='PETR4.SA',
+            symbol=symbol,
             predictions=predictions,
-            model_version=self.model_weights.get('version', '1.0.0'),
+            model_version='2.0.0',
             generated_at=datetime.now().isoformat(),
-            metrics=self.model_weights.get('metrics', {})
+            metrics=metrics_dict
         )
 
     def execute_custom(self, historical_prices: List[dict], days_ahead: int = 7) -> PredictionResponse:
-        """
-        Execute prediction using user-provided historical data.
-
-        Args:
-            historical_prices: Lista de dicts com 'date' e 'close'
-            days_ahead: Número de dias para prever
-        """
-        if self.model_weights is None or self.scaler_params is None:
+        """Execute prediction using user-provided historical data."""
+        if self.model is None:
             raise ValueError('Modelo não carregado. Execute o script de treinamento primeiro.')
 
-        if len(historical_prices) < self.sequence_length:
+        needed = self.lookback + 30
+        if len(historical_prices) < needed:
             raise ValueError(
-                f'Dados insuficientes. Forneça ao menos {self.sequence_length} registros. '
+                f'Dados insuficientes. Forneça ao menos {needed} registros para garantir a precisão dos indicadores. '
                 f'Recebido: {len(historical_prices)}'
             )
 
-        # Use the last sequence_length prices
-        recent_prices = historical_prices[-self.sequence_length:]
-        close_prices = np.array([p['close'] for p in recent_prices])
-        normalized = self._normalize(close_prices).reshape(-1, 1)
+        # Convert to DataFrame
+        df = pd.DataFrame(historical_prices)
+        # Rename 'close' column if other OHLCV columns are missing
+        if 'open' not in df.columns:
+            df['open'] = df['close']
+        if 'high' not in df.columns:
+            df['high'] = df['close']
+        if 'low' not in df.columns:
+            df['low'] = df['close']
+        if 'volume' not in df.columns:
+            df['volume'] = 0
 
-        predictions = []
-        current_sequence = normalized.copy()
+        feature_df = self._build_features_from_df(df)
+        last_date = historical_prices[-1]['date']
 
-        # Start predictions from the last date provided
-        last_date = datetime.strptime(recent_prices[-1]['date'], '%Y-%m-%d')
-        current_date = last_date
+        predictions = self._predict_future(feature_df, last_date, days_ahead)
 
-        for i in range(days_ahead):
-            pred_normalized = self._predict_single(current_sequence)
-            pred_price = self._denormalize(np.array([pred_normalized]))[0]
-
-            # Move to next business day
-            current_date += timedelta(days=1)
-            while current_date.weekday() >= 5:
-                current_date += timedelta(days=1)
-
-            predictions.append(PredictedPrice(
-                date=current_date.strftime('%Y-%m-%d'),
-                predicted_close=round(float(pred_price), 2)
-            ))
-
-            # Update sequence for next prediction
-            new_entry = np.array([[pred_normalized]])
-            current_sequence = np.vstack([current_sequence[1:], new_entry])
+        metrics_dict = {}
+        if self.metrics and 'model' in self.metrics:
+            m = self.metrics['model']
+            metrics_dict = {
+                'mae': m.get('mae_price', 0),
+                'rmse': m.get('rmse_price', 0),
+                'mape': m.get('mape_price_pct', 0),
+                'directional_accuracy': m.get('directional_accuracy_pct', 0),
+            }
 
         return PredictionResponse(
             symbol='Custom',
             predictions=predictions,
-            model_version=self.model_weights.get('version', '1.0.0'),
+            model_version='2.0.0',
             generated_at=datetime.now().isoformat(),
-            metrics=self.model_weights.get('metrics', {})
+            metrics=metrics_dict
         )

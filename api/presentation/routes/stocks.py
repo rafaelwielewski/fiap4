@@ -19,7 +19,7 @@ def get_history(
     limit: Optional[int] = Query(None, ge=1, le=5000, description='Número máximo de registros'),
     repository: StockRepository = Depends(build_stock_repository)
 ):
-    """Retorna o histórico completo ou limitado de dados da ação Petrobras (PETR4.SA)."""
+    """Retorna o histórico completo ou limitado de dados da ação Apple (AAPL)."""
     use_case = GetStockHistoryUseCase(repository)
     return use_case.execute(limit=limit)
 
@@ -30,6 +30,6 @@ def get_latest(
     n: int = Query(30, ge=1, le=500, description='Quantidade de registros recentes'),
     repository: StockRepository = Depends(build_stock_repository)
 ):
-    """Retorna os N registros mais recentes de dados da ação Petrobras (PETR4.SA)."""
+    """Retorna os N registros mais recentes de dados da ação Apple (AAPL)."""
     use_case = GetStockDataUseCase(repository)
     return use_case.execute(n=n)

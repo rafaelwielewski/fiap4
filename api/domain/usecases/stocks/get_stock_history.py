@@ -18,7 +18,7 @@ class GetStockHistoryUseCase:
             data = data[-limit:]
 
         return StockHistory(
-            symbol='PETR4.SA',
+            symbol='AAPL',
             data=data,
             start_date=data[0].date if data else '',
             end_date=data[-1].date if data else '',

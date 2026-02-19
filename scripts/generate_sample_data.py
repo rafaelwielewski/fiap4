@@ -97,7 +97,7 @@ DENSE1_UNITS = 25
 
 
 def generate_stock_data():
-    """Generate realistic-looking stock data for Petrobras."""
+    """Generate realistic-looking stock data for Apple."""
     print('📊 Gerando dados de ações simulados...')
 
     start_date = datetime(2018, 1, 2)
@@ -113,8 +113,8 @@ def generate_stock_data():
     np.random.seed(42)
     n = len(dates)
 
-    # Generate realistic Petrobras stock prices (around R$25-R$40 range)
-    base_price = 30.0
+    # Generate realistic Apple stock prices (around $150-$200 range)
+    base_price = 180.0
     returns = np.random.normal(0.0001, 0.018, n)
     prices = [base_price]
     for r in returns[1:]:
@@ -194,7 +194,7 @@ def generate_model_weights(close_prices):
     # Save model weights
     model_data = {
         'version': '1.0.0',
-        'symbol': 'PETR4.SA',
+        'symbol': 'AAPL',
         'sequence_length': SEQUENCE_LENGTH,
         'lstm_units': LSTM_UNITS,
         'training_start': '2018-01-01',

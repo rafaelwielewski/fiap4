@@ -22,7 +22,7 @@ def predict_price(
     Realiza predição de preços futuros usando o modelo LSTM.
 
     Envie o número de dias para prever (1-30) e receba as predições.
-    Utiliza os dados históricos pré-carregados da ação PETR4.SA.
+    Utiliza os dados históricos pré-carregados da ação AAPL.
     """
     try:
         use_case = PredictStockPriceUseCase(repository)

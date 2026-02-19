@@ -19,8 +19,8 @@ class CustomPredictionRequest(BaseModel):
     """Predição com dados históricos fornecidos pelo usuário."""
     days_ahead: int = Field(default=7, ge=1, le=30, description='Número de dias para prever (1-30)')
     historical_data: List[HistoricalPrice] = Field(
-        description='Lista de preços históricos de fechamento (mínimo 60 registros)',
-        min_length=60
+        description='Lista de preços históricos de fechamento (mínimo 90 registros para cálculo de indicadores)',
+        min_length=90
     )
 
 
@@ -44,6 +44,7 @@ class ModelMetrics(BaseModel):
     mae: float = Field(description='Mean Absolute Error')
     rmse: float = Field(description='Root Mean Square Error')
     mape: float = Field(description='Mean Absolute Percentage Error')
+    directional_accuracy: Optional[float] = Field(None, description='Directional Accuracy Percentage')
 
 
 class ModelInfo(BaseModel):
@@ -58,3 +59,5 @@ class ModelInfo(BaseModel):
     metrics: ModelMetrics
     last_trained: str
     is_active: bool
+    horizon_days: Optional[int] = 5
+    baselines: Optional[Dict[str, Any]] = None

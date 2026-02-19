@@ -4,7 +4,7 @@ API RESTful para predição de preços de ações usando modelo LSTM (Long Short
 
 ## 🎯 Sobre o Projeto
 
-Este projeto implementa um modelo preditivo de deep learning (LSTM) para predizer o valor de fechamento das ações da **Petrobras (PETR4.SA)**, incluindo toda a pipeline desde a coleta de dados até o deploy em produção.
+Este projeto implementa um modelo preditivo de deep learning (LSTM) para predizer o valor de fechamento das ações da **Apple (AAPL)**, incluindo toda a pipeline desde a coleta de dados até o deploy em produção.
 
 ### Arquitetura
 
@@ -20,9 +20,10 @@ api/
 │   └── repositories/# Implementação dos repositórios
 ├── presentation/    # Interface HTTP
 │   ├── routes/      # Endpoints da API
-│   ├── middlewares/  # Middlewares (performance, errors)
+│   ├── middlewares/ # Middlewares (performance, errors)
 │   └── factories/   # Factory para injeção de dependência
 └── utils/           # Utilitários (logger)
+├── artifacts/       # Artefatos do modelo (Keras, Scalers, Metadata)
 ```
 
 ## 🚀 Endpoints
@@ -47,16 +48,20 @@ curl -X POST http://localhost:8081/api/v1/predictions/predict \
 **Resposta:**
 ```json
 {
-  "symbol": "PETR4.SA",
+  "symbol": "AAPL",
   "predictions": [
-    {"date": "2024-07-22", "predicted_close": 98.45},
-    {"date": "2024-07-23", "predicted_close": 99.12}
+    {"date": "2024-07-22", "predicted_close": 185.45},
+    {"date": "2024-07-23", "predicted_close": 186.12}
   ],
   "model_version": "1.0.0",
   "generated_at": "2024-07-20T15:30:00",
   "metrics": {"mae": 2.34, "rmse": 3.12, "mape": 2.89}
 }
 ```
+
+### Dashboard
+
+Acesse o dashboard interativo em: `http://localhost:8501`
 
 ## 🛠️ Setup Local
 
@@ -89,11 +94,11 @@ make train
 ```
 
 O script irá:
-1. Baixar dados históricos da Petrobras (PETR4.SA) via Yahoo Finance
-2. Treinar modelo LSTM com 2 camadas (50 unidades cada)
-3. Avaliar com métricas MAE, RMSE e MAPE
-4. Salvar pesos em `data/model_weights.json`
-5. Salvar dados em `data/stock_data.csv`
+1. Baixar dados históricos da Apple (AAPL) via Yahoo Finance
+2. Calcular 16 indicadores técnicos (RSI, MACD, SMA, EMA, Volatilidade...)
+3. Treinar modelo LSTM com features arquitetura multi-input
+4. Avaliar com métricas MAE, RMSE, MAPE e Acurácia Direcional
+5. Salvar modelo (`final_model.keras`) e artefatos em `artifacts/`
 
 ### Iniciar API
 
@@ -107,7 +112,7 @@ make dev
 
 ### Arquitetura
 ```
-Input (60 timesteps, 1 feature)
+Input (60 timesteps, 16 features)
   → LSTM (50 units, return_sequences=True)
   → Dropout (0.2)
   → LSTM (50 units)
@@ -117,15 +122,15 @@ Input (60 timesteps, 1 feature)
 ```
 
 ### Dados
-- **Empresa:** Petrobras (PETR4.SA)
-- **Período:** 2018-01-01 a 2024-07-20
-- **Feature:** Preço de fechamento (Close)
+- **Empresa:** Apple (AAPL)
+- **Período:** 2018-01-01 a Presente
+- **Features:** 16 (Close, Open, High, Low, Volume, RSI, MACD, etc.)
 - **Sequência:** 60 dias anteriores para prever o próximo
 
 ### Estratégia de Deploy
 - **Treinamento:** Local com TensorFlow/Keras
-- **Inferência:** Numpy puro (sem TensorFlow na Vercel)
-- Os pesos do modelo são exportados em JSON e a inferência é feita reconstruindo o forward pass do LSTM com numpy
+- **Inferência:** API carrega o modelo Keras otimizado (`.keras`)
+- O modelo prevê a variação (delta) do preço para maior estabilidade
 
 ## ☁️ Deploy na Vercel
 
@@ -137,15 +142,19 @@ make deploy-prod
 make deploy-dev
 ```
 
-A API usa apenas `numpy` para inferência, mantendo o pacote leve o suficiente para a Vercel (sem TensorFlow).
+O deploy na Vercel pode exigir configuração de tamanho devido ao TensorFlow. Recomenda-se Docker/Render/Railway para produção full.
 
 ## 📁 Estrutura de Dados
 
 ```
+artifacts/
+├── final_model.keras    # Modelo treinado
+├── scaler_X.joblib      # Scaler de features
+├── scaler_y.joblib      # Scaler de target
+├── metadata.json        # Metadados do treinamento
+└── metrics.json         # Métricas de avaliação
 data/
-├── stock_data.csv       # Dados históricos da ação
-├── model_weights.json   # Pesos do modelo LSTM
-└── scaler_params.json   # Parâmetros de normalização
+└── stock_data.csv       # Dados históricos (backup)
 ```
 
 ## 🔧 Tecnologias

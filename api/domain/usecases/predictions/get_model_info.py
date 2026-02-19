@@ -11,38 +11,45 @@ class GetModelInfoUseCase:
     def execute(self) -> ModelInfo:
         """Execute the use case to get model information."""
         try:
-            weights_path = os.path.join('data', 'model_weights.json')
-            scaler_path = os.path.join('data', 'scaler_params.json')
+            artifacts_dir = 'artifacts'
+            metadata_path = os.path.join(artifacts_dir, 'metadata.json')
+            metrics_path = os.path.join(artifacts_dir, 'metrics.json')
 
-            with open(weights_path, 'r') as f:
-                model_data = json.load(f)
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
 
-            with open(scaler_path, 'r') as f:
-                scaler_data = json.load(f)
+            metrics_data = {}
+            if os.path.exists(metrics_path):
+                with open(metrics_path, 'r') as f:
+                    metrics_data = json.load(f)
 
-            metrics_data = model_data.get('metrics', {})
+            model_metrics = metrics_data.get('model', {})
+            symbol = metadata.get('symbol', 'AAPL')
 
             return ModelInfo(
-                model_name='LSTM Stock Predictor',
-                description='Modelo LSTM para predição de preços de fechamento de ações da Petrobras (PETR4.SA)',
-                version=model_data.get('version', '1.0.0'),
-                symbol='PETR4.SA',
+                model_name='LSTM Stock Predictor v2',
+                description=f'Modelo LSTM multi-feature para predição de preços de {symbol} com 16 indicadores técnicos',
+                version='2.0.0',
+                symbol=symbol,
                 training_period={
-                    'start': model_data.get('training_start', '2018-01-01'),
-                    'end': model_data.get('training_end', '2024-07-20')
+                    'start': metadata.get('start_date', '2018-01-01'),
+                    'end': metadata.get('end_date', 'N/A')
                 },
-                sequence_length=model_data.get('sequence_length', 60),
-                features_used=['close'],
+                sequence_length=metadata.get('lookback', 60),
+                features_used=metadata.get('features', []),
                 metrics=ModelMetrics(
-                    mae=metrics_data.get('mae', 0.0),
-                    rmse=metrics_data.get('rmse', 0.0),
-                    mape=metrics_data.get('mape', 0.0)
+                    mae=model_metrics.get('mae_price', 0.0),
+                    rmse=model_metrics.get('rmse_price', 0.0),
+                    mape=model_metrics.get('mape_price_pct', 0.0),
+                    directional_accuracy=model_metrics.get('directional_accuracy_pct', 0.0),
                 ),
-                last_trained=model_data.get('trained_at', 'N/A'),
-                is_active=True
+                last_trained=metadata.get('trained_at', 'N/A'),
+                is_active=True,
+                horizon_days=metadata.get('horizon_days', 5),
+                baselines=metrics_data.get('baselines', {}),
             )
         except FileNotFoundError:
-            logger.error('Arquivos do modelo não encontrados')
+            logger.error('Arquivos do modelo não encontrados em artifacts/')
             raise ValueError('Modelo não encontrado. Execute o script de treinamento primeiro.')
         except Exception as e:
             logger.error(f'Erro ao carregar info do modelo: {str(e)}')

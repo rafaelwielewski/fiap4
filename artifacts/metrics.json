@@ -1,0 +1,20 @@
+{
+  "model": {
+    "mae_price": 2.8174686431884766,
+    "rmse_price": 4.251648975685924,
+    "mape_price_pct": 1.236272044479847,
+    "directional_accuracy_pct": 52.8052805280528
+  },
+  "baselines": {
+    "naive": {
+      "mae_price": 2.8258464336395264,
+      "rmse_price": 4.241585648418078,
+      "mape_price_pct": 1.2395815923810005
+    },
+    "sma_60": {
+      "mae_price": 14.022299723945174,
+      "rmse_price": 16.80749619073476,
+      "mape_price_pct": 5.982534242267654
+    }
+  }
+}

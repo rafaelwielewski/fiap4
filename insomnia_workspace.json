@@ -10,7 +10,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Stock Price Prediction API - FIAP4",
-      "description": "API para predição de preços de ações usando modelo LSTM",
+      "description": "API para predi\u00e7\u00e3o de pre\u00e7os de a\u00e7\u00f5es usando modelo LSTM",
       "scope": "collection",
       "_type": "workspace"
     },
@@ -45,7 +45,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Stocks",
-      "description": "Endpoints de dados históricos de ações",
+      "description": "Endpoints de dados hist\u00f3ricos de a\u00e7\u00f5es",
       "_type": "request_group"
     },
     {
@@ -54,7 +54,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Predictions",
-      "description": "Endpoints de predição com modelo LSTM",
+      "description": "Endpoints de predi\u00e7\u00e3o com modelo LSTM",
       "_type": "request_group"
     },
     {
@@ -63,7 +63,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Analytics",
-      "description": "Endpoints de monitoramento e métricas",
+      "description": "Endpoints de monitoramento e m\u00e9tricas",
       "_type": "request_group"
     },
     {
@@ -72,7 +72,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Root",
-      "description": "Informações gerais da API",
+      "description": "Informa\u00e7\u00f5es gerais da API",
       "url": "{{ _.base_url }}/",
       "method": "GET",
       "body": {},
@@ -87,7 +87,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Health Check",
-      "description": "Verifica o status de saúde da API",
+      "description": "Verifica o status de sa\u00fade da API",
       "url": "{{ _.base_url }}/api/v1/health/",
       "method": "GET",
       "body": {},
@@ -102,7 +102,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Stocks History",
-      "description": "Retorna histórico de dados da ação PETR4.SA",
+      "description": "Retorna hist\u00f3rico de dados da a\u00e7\u00e3o PETR4.SA",
       "url": "{{ _.base_url }}/api/v1/stocks/history",
       "method": "GET",
       "body": {},
@@ -111,7 +111,7 @@
           "id": "param_limit",
           "name": "limit",
           "value": "100",
-          "description": "Número máximo de registros (1-5000)",
+          "description": "N\u00famero m\u00e1ximo de registros (1-5000)",
           "disabled": false
         }
       ],
@@ -125,7 +125,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Stocks Latest",
-      "description": "Retorna os N registros mais recentes da ação PETR4.SA",
+      "description": "Retorna os N registros mais recentes da a\u00e7\u00e3o PETR4.SA",
       "url": "{{ _.base_url }}/api/v1/stocks/latest",
       "method": "GET",
       "body": {},
@@ -148,7 +148,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Predict Stock Price",
-      "description": "Realiza predição de preços futuros usando o modelo LSTM",
+      "description": "Realiza predi\u00e7\u00e3o de pre\u00e7os futuros usando o modelo LSTM",
       "url": "{{ _.base_url }}/api/v1/predictions/predict",
       "method": "POST",
       "body": {
@@ -171,7 +171,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Model Info",
-      "description": "Retorna informações detalhadas sobre o modelo LSTM",
+      "description": "Retorna informa\u00e7\u00f5es detalhadas sobre o modelo LSTM",
       "url": "{{ _.base_url }}/api/v1/predictions/model-info",
       "method": "GET",
       "body": {},
@@ -186,7 +186,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Analytics Metrics",
-      "description": "Retorna métricas gerais da API (requests, erros, response time)",
+      "description": "Retorna m\u00e9tricas gerais da API (requests, erros, response time)",
       "url": "{{ _.base_url }}/api/v1/analytics/metrics",
       "method": "GET",
       "body": {},
@@ -201,7 +201,7 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Analytics Performance",
-      "description": "Retorna métricas detalhadas de performance (percentis, por endpoint)",
+      "description": "Retorna m\u00e9tricas detalhadas de performance (percentis, por endpoint)",
       "url": "{{ _.base_url }}/api/v1/analytics/performance",
       "method": "GET",
       "body": {},
@@ -216,12 +216,12 @@
       "modified": 1771457100000,
       "created": 1771457100000,
       "name": "Predict Custom (User Data)",
-      "description": "Predição com dados históricos fornecidos pelo usuário (mínimo 60 registros)",
+      "description": "Predi\u00e7\u00e3o com dados hist\u00f3ricos fornecidos pelo usu\u00e1rio (m\u00ednimo 60 registros)",
       "url": "{{ _.base_url }}/api/v1/predictions/predict-custom",
       "method": "POST",
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"days_ahead\": 7,\n  \"historical_data\": [\n    {\n      \"date\": \"2025-11-17\",\n      \"close\": 31.87\n    },\n    {\n      \"date\": \"2025-11-18\",\n      \"close\": 31.98\n    },\n    {\n      \"date\": \"2025-11-19\",\n      \"close\": 31.82\n    },\n    {\n      \"date\": \"2025-11-21\",\n      \"close\": 31.57\n    },\n    {\n      \"date\": \"2025-11-24\",\n      \"close\": 31.54\n    },\n    {\n      \"date\": \"2025-11-25\",\n      \"close\": 31.29\n    },\n    {\n      \"date\": \"2025-11-26\",\n      \"close\": 31.24\n    },\n    {\n      \"date\": \"2025-11-27\",\n      \"close\": 31.41\n    },\n    {\n      \"date\": \"2025-11-28\",\n      \"close\": 30.82\n    },\n    {\n      \"date\": \"2025-12-01\",\n      \"close\": 30.87\n    },\n    {\n      \"date\": \"2025-12-02\",\n      \"close\": 31.09\n    },\n    {\n      \"date\": \"2025-12-03\",\n      \"close\": 31.32\n    },\n    {\n      \"date\": \"2025-12-04\",\n      \"close\": 31.52\n    },\n    {\n      \"date\": \"2025-12-05\",\n      \"close\": 30.41\n    },\n    {\n      \"date\": \"2025-12-08\",\n      \"close\": 30.69\n    },\n    {\n      \"date\": \"2025-12-09\",\n      \"close\": 30.88\n    },\n    {\n      \"date\": \"2025-12-10\",\n      \"close\": 30.96\n    },\n    {\n      \"date\": \"2025-12-11\",\n      \"close\": 30.45\n    },\n    {\n      \"date\": \"2025-12-12\",\n      \"close\": 30.62\n    },\n    {\n      \"date\": \"2025-12-15\",\n      \"close\": 30.73\n    },\n    {\n      \"date\": \"2025-12-16\",\n      \"close\": 29.8\n    },\n    {\n      \"date\": \"2025-12-17\",\n      \"close\": 30.13\n    },\n    {\n      \"date\": \"2025-12-18\",\n      \"close\": 29.95\n    },\n    {\n      \"date\": \"2025-12-19\",\n      \"close\": 30.06\n    },\n    {\n      \"date\": \"2025-12-22\",\n      \"close\": 30.15\n    },\n    {\n      \"date\": \"2025-12-23\",\n      \"close\": 30.31\n    },\n    {\n      \"date\": \"2025-12-26\",\n      \"close\": 30.41\n    },\n    {\n      \"date\": \"2025-12-29\",\n      \"close\": 30.73\n    },\n    {\n      \"date\": \"2025-12-30\",\n      \"close\": 30.82\n    },\n    {\n      \"date\": \"2026-01-02\",\n      \"close\": 30.71\n    },\n    {\n      \"date\": \"2026-01-05\",\n      \"close\": 30.2\n    },\n    {\n      \"date\": \"2026-01-06\",\n      \"close\": 29.64\n    },\n    {\n      \"date\": \"2026-01-07\",\n      \"close\": 29.83\n    },\n    {\n      \"date\": \"2026-01-08\",\n      \"close\": 30.2\n    },\n    {\n      \"date\": \"2026-01-09\",\n      \"close\": 30.3\n    },\n    {\n      \"date\": \"2026-01-12\",\n      \"close\": 30.36\n    },\n    {\n      \"date\": \"2026-01-13\",\n      \"close\": 31.14\n    },\n    {\n      \"date\": \"2026-01-14\",\n      \"close\": 31.99\n    },\n    {\n      \"date\": \"2026-01-15\",\n      \"close\": 31.79\n    },\n    {\n      \"date\": \"2026-01-16\",\n      \"close\": 32.04\n    },\n    {\n      \"date\": \"2026-01-19\",\n      \"close\": 32.17\n    },\n    {\n      \"date\": \"2026-01-20\",\n      \"close\": 32.29\n    },\n    {\n      \"date\": \"2026-01-21\",\n      \"close\": 33.43\n    },\n    {\n      \"date\": \"2026-01-22\",\n      \"close\": 33.58\n    },\n    {\n      \"date\": \"2026-01-23\",\n      \"close\": 35.04\n    },\n    {\n      \"date\": \"2026-01-26\",\n      \"close\": 35.36\n    },\n    {\n      \"date\": \"2026-01-27\",\n      \"close\": 36.13\n    },\n    {\n      \"date\": \"2026-01-28\",\n      \"close\": 37.34\n    },\n    {\n      \"date\": \"2026-01-29\",\n      \"close\": 37.7\n    },\n    {\n      \"date\": \"2026-01-30\",\n      \"close\": 37.76\n    },\n    {\n      \"date\": \"2026-02-02\",\n      \"close\": 37.24\n    },\n    {\n      \"date\": \"2026-02-03\",\n      \"close\": 37.58\n    },\n    {\n      \"date\": \"2026-02-04\",\n      \"close\": 37.52\n    },\n    {\n      \"date\": \"2026-02-05\",\n      \"close\": 37.0\n    },\n    {\n      \"date\": \"2026-02-06\",\n      \"close\": 36.65\n    },\n    {\n      \"date\": \"2026-02-09\",\n      \"close\": 37.32\n    },\n    {\n      \"date\": \"2026-02-10\",\n      \"close\": 37.35\n    },\n    {\n      \"date\": \"2026-02-11\",\n      \"close\": 38.08\n    },\n    {\n      \"date\": \"2026-02-12\",\n      \"close\": 37.11\n    },\n    {\n      \"date\": \"2026-02-13\",\n      \"close\": 36.89\n    }\n  ]\n}"
+        "text": "{\n  \"days_ahead\": 7,\n  \"historical_data\": [\n    {\n      \"date\": \"2025-10-16\",\n      \"close\": 38.07\n    },\n    {\n      \"date\": \"2025-10-17\",\n      \"close\": 38.87\n    },\n    {\n      \"date\": \"2025-10-20\",\n      \"close\": 39.24\n    },\n    {\n      \"date\": \"2025-10-21\",\n      \"close\": 40.04\n    },\n    {\n      \"date\": \"2025-10-22\",\n      \"close\": 40.73\n    },\n    {\n      \"date\": \"2025-10-23\",\n      \"close\": 40.07\n    },\n    {\n      \"date\": \"2025-10-24\",\n      \"close\": 39.51\n    },\n    {\n      \"date\": \"2025-10-27\",\n      \"close\": 39.71\n    },\n    {\n      \"date\": \"2025-10-28\",\n      \"close\": 39.83\n    },\n    {\n      \"date\": \"2025-10-29\",\n      \"close\": 40.46\n    },\n    {\n      \"date\": \"2025-10-30\",\n      \"close\": 39.87\n    },\n    {\n      \"date\": \"2025-10-31\",\n      \"close\": 39.81\n    },\n    {\n      \"date\": \"2025-11-03\",\n      \"close\": 40.35\n    },\n    {\n      \"date\": \"2025-11-04\",\n      \"close\": 39.56\n    },\n    {\n      \"date\": \"2025-11-05\",\n      \"close\": 39.97\n    },\n    {\n      \"date\": \"2025-11-06\",\n      \"close\": 40.1\n    },\n    {\n      \"date\": \"2025-11-07\",\n      \"close\": 40.89\n    },\n    {\n      \"date\": \"2025-11-10\",\n      \"close\": 40.21\n    },\n    {\n      \"date\": \"2025-11-11\",\n      \"close\": 40.11\n    },\n    {\n      \"date\": \"2025-11-12\",\n      \"close\": 40.74\n    },\n    {\n      \"date\": \"2025-11-13\",\n      \"close\": 40.98\n    },\n    {\n      \"date\": \"2025-11-14\",\n      \"close\": 41.64\n    },\n    {\n      \"date\": \"2025-11-17\",\n      \"close\": 41.23\n    },\n    {\n      \"date\": \"2025-11-18\",\n      \"close\": 42.03\n    },\n    {\n      \"date\": \"2025-11-19\",\n      \"close\": 42.13\n    },\n    {\n      \"date\": \"2025-11-20\",\n      \"close\": 42.25\n    },\n    {\n      \"date\": \"2025-11-21\",\n      \"close\": 41.68\n    },\n    {\n      \"date\": \"2025-11-24\",\n      \"close\": 42.25\n    },\n    {\n      \"date\": \"2025-11-25\",\n      \"close\": 42.9\n    },\n    {\n      \"date\": \"2025-11-26\",\n      \"close\": 42.81\n    },\n    {\n      \"date\": \"2025-11-27\",\n      \"close\": 43.33\n    },\n    {\n      \"date\": \"2025-11-28\",\n      \"close\": 43.63\n    },\n    {\n      \"date\": \"2025-12-01\",\n      \"close\": 42.99\n    },\n    {\n      \"date\": \"2025-12-02\",\n      \"close\": 42.98\n    },\n    {\n      \"date\": \"2025-12-03\",\n      \"close\": 43.41\n    },\n    {\n      \"date\": \"2025-12-04\",\n      \"close\": 43.19\n    },\n    {\n      \"date\": \"2025-12-05\",\n      \"close\": 43.8\n    },\n    {\n      \"date\": \"2025-12-08\",\n      \"close\": 43.32\n    },\n    {\n      \"date\": \"2025-12-09\",\n      \"close\": 42.93\n    },\n    {\n      \"date\": \"2025-12-10\",\n      \"close\": 42.52\n    },\n    {\n      \"date\": \"2025-12-11\",\n      \"close\": 42.01\n    },\n    {\n      \"date\": \"2025-12-12\",\n      \"close\": 41.86\n    },\n    {\n      \"date\": \"2025-12-15\",\n      \"close\": 41.72\n    },\n    {\n      \"date\": \"2025-12-16\",\n      \"close\": 41.15\n    },\n    {\n      \"date\": \"2025-12-17\",\n      \"close\": 40.98\n    },\n    {\n      \"date\": \"2025-12-18\",\n      \"close\": 41.07\n    },\n    {\n      \"date\": \"2025-12-19\",\n      \"close\": 40.76\n    },\n    {\n      \"date\": \"2025-12-22\",\n      \"close\": 41.13\n    },\n    {\n      \"date\": \"2025-12-23\",\n      \"close\": 41.83\n    },\n    {\n      \"date\": \"2025-12-24\",\n      \"close\": 41.88\n    },\n    {\n      \"date\": \"2025-12-25\",\n      \"close\": 41.77\n    },\n    {\n      \"date\": \"2025-12-26\",\n      \"close\": 40.98\n    },\n    {\n      \"date\": \"2025-12-29\",\n      \"close\": 40.44\n    },\n    {\n      \"date\": \"2025-12-30\",\n      \"close\": 40.2\n    },\n    {\n      \"date\": \"2025-12-31\",\n      \"close\": 39.83\n    },\n    {\n      \"date\": \"2026-01-01\",\n      \"close\": 39.42\n    },\n    {\n      \"date\": \"2026-01-02\",\n      \"close\": 39.4\n    },\n    {\n      \"date\": \"2026-01-05\",\n      \"close\": 39.89\n    },\n    {\n      \"date\": \"2026-01-06\",\n      \"close\": 39.65\n    },\n    {\n      \"date\": \"2026-01-07\",\n      \"close\": 39.45\n    },\n    {\n      \"date\": \"2026-01-08\",\n      \"close\": 40.15\n    },\n    {\n      \"date\": \"2026-01-09\",\n      \"close\": 40.69\n    },\n    {\n      \"date\": \"2026-01-12\",\n      \"close\": 40.81\n    },\n    {\n      \"date\": \"2026-01-13\",\n      \"close\": 40.94\n    },\n    {\n      \"date\": \"2026-01-14\",\n      \"close\": 40.45\n    },\n    {\n      \"date\": \"2026-01-15\",\n      \"close\": 40.09\n    },\n    {\n      \"date\": \"2026-01-16\",\n      \"close\": 39.66\n    },\n    {\n      \"date\": \"2026-01-19\",\n      \"close\": 39.46\n    },\n    {\n      \"date\": \"2026-01-20\",\n      \"close\": 38.72\n    },\n    {\n      \"date\": \"2026-01-21\",\n      \"close\": 39.32\n    },\n    {\n      \"date\": \"2026-01-22\",\n      \"close\": 39.43\n    },\n    {\n      \"date\": \"2026-01-23\",\n      \"close\": 39.08\n    },\n    {\n      \"date\": \"2026-01-26\",\n      \"close\": 38.59\n    },\n    {\n      \"date\": \"2026-01-27\",\n      \"close\": 39.01\n    },\n    {\n      \"date\": \"2026-01-28\",\n      \"close\": 39.63\n    },\n    {\n      \"date\": \"2026-01-29\",\n      \"close\": 39.94\n    },\n    {\n      \"date\": \"2026-01-30\",\n      \"close\": 39.29\n    },\n    {\n      \"date\": \"2026-02-02\",\n      \"close\": 38.61\n    },\n    {\n      \"date\": \"2026-02-03\",\n      \"close\": 38.98\n    },\n    {\n      \"date\": \"2026-02-04\",\n      \"close\": 39.21\n    },\n    {\n      \"date\": \"2026-02-05\",\n      \"close\": 39.97\n    },\n    {\n      \"date\": \"2026-02-06\",\n      \"close\": 39.65\n    },\n    {\n      \"date\": \"2026-02-09\",\n      \"close\": 38.97\n    },\n    {\n      \"date\": \"2026-02-10\",\n      \"close\": 38.45\n    },\n    {\n      \"date\": \"2026-02-11\",\n      \"close\": 38.63\n    },\n    {\n      \"date\": \"2026-02-12\",\n      \"close\": 38.36\n    },\n    {\n      \"date\": \"2026-02-13\",\n      \"close\": 37.66\n    },\n    {\n      \"date\": \"2026-02-16\",\n      \"close\": 38.37\n    },\n    {\n      \"date\": \"2026-02-17\",\n      \"close\": 38.65\n    },\n    {\n      \"date\": \"2026-02-18\",\n      \"close\": 38.03\n    }\n  ]\n}"
       },
       "parameters": [],
       "headers": [
