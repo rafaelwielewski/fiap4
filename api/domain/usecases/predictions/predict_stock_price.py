@@ -33,10 +33,11 @@ class PredictStockPriceUseCase:
             artifacts_dir = os.path.join('artifacts')
 
             # Load keras model
-            os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-            import tensorflow as tf
-            model_path = os.path.join(artifacts_dir, 'final_model.keras')
-            self.model = tf.keras.models.load_model(model_path)
+            # Load ONNX model
+            import onnxruntime as ort
+            model_path = os.path.join(artifacts_dir, 'final_model.onnx')
+            self.model_sess = ort.InferenceSession(model_path)
+            self.input_name = self.model_sess.get_inputs()[0].name
 
             # Load scalers
             self.scaler_X = joblib.load(os.path.join(artifacts_dir, 'scaler_X.joblib'))
@@ -55,10 +56,10 @@ class PredictStockPriceUseCase:
                 with open(metrics_path, 'r') as f:
                     self.metrics = json.load(f)
 
-            logger.info('Modelo LSTM (keras) carregado com sucesso')
+            logger.info('Modelo LSTM (ONNX) carregado com sucesso')
         except Exception as e:
             logger.error(f'Erro ao carregar modelo: {str(e)}')
-            self.model = None
+            self.model_sess = None
 
     @staticmethod
     def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
@@ -136,8 +137,11 @@ class PredictStockPriceUseCase:
 
         steps = (days_ahead + self.horizon - 1) // self.horizon  # ceiling division
         for step in range(steps):
-            input_seq = sequence[-self.lookback:].reshape(1, self.lookback, len(feature_cols))
-            pred_delta_scaled = self.model.predict(input_seq, verbose=0)
+            input_seq = sequence[-self.lookback:].reshape(1, self.lookback, len(feature_cols)).astype(np.float32)
+            
+            # Use ONNX Runtime for prediction
+            pred_delta_scaled = self.model_sess.run(None, {self.input_name: input_seq})[0]
+            
             pred_delta = self.scaler_y.inverse_transform(pred_delta_scaled)[0][0]
             pred_price = current_close + float(pred_delta)
 
@@ -168,7 +172,7 @@ class PredictStockPriceUseCase:
 
     def execute(self, days_ahead: int = 7) -> PredictionResponse:
         """Execute prediction using pre-loaded stock data."""
-        if self.model is None:
+        if self.model_sess is None:
             raise ValueError('Modelo não carregado. Execute o script de treinamento primeiro.')
 
         # Get enough data for features (need ~30 extra rows for indicators like SMA21)
@@ -215,7 +219,7 @@ class PredictStockPriceUseCase:
 
     def execute_custom(self, historical_prices: List[dict], days_ahead: int = 7) -> PredictionResponse:
         """Execute prediction using user-provided historical data."""
-        if self.model is None:
+        if self.model_sess is None:
             raise ValueError('Modelo não carregado. Execute o script de treinamento primeiro.')
 
         needed = self.lookback + 30
