@@ -9,6 +9,21 @@ class PredictionRequest(BaseModel):
     days_ahead: int = Field(default=7, ge=1, le=30, description='Número de dias para prever (1-30)')
 
 
+class HistoricalPrice(BaseModel):
+    """Preço histórico fornecido pelo usuário."""
+    date: str = Field(description='Data no formato YYYY-MM-DD')
+    close: float = Field(description='Preço de fechamento')
+
+
+class CustomPredictionRequest(BaseModel):
+    """Predição com dados históricos fornecidos pelo usuário."""
+    days_ahead: int = Field(default=7, ge=1, le=30, description='Número de dias para prever (1-30)')
+    historical_data: List[HistoricalPrice] = Field(
+        description='Lista de preços históricos de fechamento (mínimo 60 registros)',
+        min_length=60
+    )
+
+
 class PredictedPrice(BaseModel):
     """Um preço previsto para uma data futura."""
     date: str

@@ -172,3 +172,58 @@ class PredictStockPriceUseCase:
             generated_at=datetime.now().isoformat(),
             metrics=self.model_weights.get('metrics', {})
         )
+
+    def execute_custom(self, historical_prices: List[dict], days_ahead: int = 7) -> PredictionResponse:
+        """
+        Execute prediction using user-provided historical data.
+
+        Args:
+            historical_prices: Lista de dicts com 'date' e 'close'
+            days_ahead: Número de dias para prever
+        """
+        if self.model_weights is None or self.scaler_params is None:
+            raise ValueError('Modelo não carregado. Execute o script de treinamento primeiro.')
+
+        if len(historical_prices) < self.sequence_length:
+            raise ValueError(
+                f'Dados insuficientes. Forneça ao menos {self.sequence_length} registros. '
+                f'Recebido: {len(historical_prices)}'
+            )
+
+        # Use the last sequence_length prices
+        recent_prices = historical_prices[-self.sequence_length:]
+        close_prices = np.array([p['close'] for p in recent_prices])
+        normalized = self._normalize(close_prices).reshape(-1, 1)
+
+        predictions = []
+        current_sequence = normalized.copy()
+
+        # Start predictions from the last date provided
+        last_date = datetime.strptime(recent_prices[-1]['date'], '%Y-%m-%d')
+        current_date = last_date
+
+        for i in range(days_ahead):
+            pred_normalized = self._predict_single(current_sequence)
+            pred_price = self._denormalize(np.array([pred_normalized]))[0]
+
+            # Move to next business day
+            current_date += timedelta(days=1)
+            while current_date.weekday() >= 5:
+                current_date += timedelta(days=1)
+
+            predictions.append(PredictedPrice(
+                date=current_date.strftime('%Y-%m-%d'),
+                predicted_close=round(float(pred_price), 2)
+            ))
+
+            # Update sequence for next prediction
+            new_entry = np.array([[pred_normalized]])
+            current_sequence = np.vstack([current_sequence[1:], new_entry])
+
+        return PredictionResponse(
+            symbol='Custom',
+            predictions=predictions,
+            model_version=self.model_weights.get('version', '1.0.0'),
+            generated_at=datetime.now().isoformat(),
+            metrics=self.model_weights.get('metrics', {})
+        )

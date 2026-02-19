@@ -37,7 +37,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 # Configuration
 SYMBOL = 'PETR4.SA'
 START_DATE = '2018-01-01'
-END_DATE = '2024-07-20'
+END_DATE = datetime.today().strftime('%Y-%m-%d')
 SEQUENCE_LENGTH = 60
 LSTM_UNITS = 50
 EPOCHS = 100
