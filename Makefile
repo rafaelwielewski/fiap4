@@ -42,7 +42,7 @@ deploy-dev:
 
 # Start Streamlit monitoring dashboard
 dashboard:
-	poetry run streamlit run api/dashboard.py --server.port 8501 --server.address localhost
+	BASE_URL=https://fiap4.vercel.app poetry run streamlit run api/dashboard.py
 
 # Start both API and dashboard
 start-all:
