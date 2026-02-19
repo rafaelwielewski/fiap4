@@ -1,7 +1,7 @@
 {
   "symbol": "AAPL",
   "start_date": "2018-01-01",
-  "end_date": "2024-07-20",
+  "end_date": "2026-01-01",
   "lookback": 60,
   "horizon_days": 1,
   "features": [
@@ -23,11 +23,11 @@
     "vol_21"
   ],
   "target": "delta_close = close_(t+1) - close_t",
-  "trained_at": "2026-02-19T19:52:50.219940",
+  "trained_at": "2026-02-19T20:29:10.628471",
   "splits": {
-    "train_rows": 1139,
-    "val_rows": 243,
-    "test_rows": 243
+    "train_rows": 1393,
+    "val_rows": 298,
+    "test_rows": 298
   },
   "notes": {
     "why_delta": "delta makes the target more stationary than raw price; evaluation still in price",
