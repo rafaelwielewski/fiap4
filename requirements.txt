@@ -6,14 +6,9 @@ pydantic==2.11.7
 python-dotenv==1.1.1
 python-multipart==0.0.9
 
-# Data processing dependencies
+# Data processing / inference dependencies
 pandas==2.3.1
 numpy==1.26.4
-joblib
-scikit-learn
-onnxruntime
-
-# Dashboard dependencies (Streamlit Community Cloud)
-streamlit
-plotly
-requests
+joblib==1.5.3
+scikit-learn==1.4.2
+onnxruntime==1.20.1
