@@ -5,6 +5,8 @@ import tensorflow as tf
 import onnx
 import shutil
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "" 
+
 def convert_to_onnx():
     artifacts_dir = 'artifacts'
     keras_model_path = os.path.join(artifacts_dir, 'final_model.keras')

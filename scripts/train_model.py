@@ -1,6 +1,7 @@
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU (remove if you want to use GPU and have it configured)
 
 import json
 from datetime import datetime
@@ -28,7 +29,7 @@ tf.random.set_seed(SEED)
 
 SYMBOL = "AAPL"
 START_DATE = "2018-01-01"
-END_DATE = datetime.today().strftime("%Y-%m-%d")
+END_DATE = "2024-07-20"
 
 LOOKBACK = 60
 HORIZON = 1

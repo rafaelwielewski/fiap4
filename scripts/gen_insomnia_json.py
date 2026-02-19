@@ -1,80 +1,68 @@
 import json
 import os
-from datetime import datetime, timedelta
-import random
+
+import yfinance as yf
 
 WORKSPACE_PATH = 'insomnia_workspace.json'
 
-def generate_historical_data():
-    days = 90
-    # End date: Yesterday or Today (if market open). Let's use 2026-02-18 (Wednesday)
-    end_date = datetime(2026, 2, 18)
-    
+
+def fetch_aapl_data(days: int = 90) -> list[dict]:
+    ticker = yf.Ticker('AAPL')
+    # Fetch enough trading days (calendar days buffer ~1.5x to cover weekends/holidays)
+    df = ticker.history(period=f'{int(days * 1.5)}d', interval='1d', auto_adjust=True)
+    df = df.dropna(subset=['Close'])
+    df = df.tail(days).reset_index()
+
     data = []
-    current = end_date
-    price = 37.0 # Close to current real price
-    
-    while len(data) < days:
-        if current.weekday() < 5:
-            change = random.uniform(-0.5, 0.5)
-            price -= change # Going backwards, so subtract change (approx)
-            data.append({
-                "date": current.strftime('%Y-%m-%d'),
-                "close": round(price, 2)
-            })
-        current -= timedelta(days=1)
-    
-    # Reverse to be chronological
-    data.reverse()
-    
-    # Recalculate prices forward to look more natural (random walk forward)
-    # Start from the first price we found (approx)
-    start_price = data[0]['close']
-    current_price = start_price
-    for item in data:
-         change = random.uniform(-0.8, 0.8)  # slightly more volatility
-         current_price += change
-         item['close'] = round(current_price, 2)
-         
+    for _, row in df.iterrows():
+        data.append({
+            'date': row['Date'].strftime('%Y-%m-%d'),
+            'close': round(float(row['Close']), 2),
+            'open': round(float(row['Open']), 2),
+            'high': round(float(row['High']), 2),
+            'low': round(float(row['Low']), 2),
+            'volume': int(row['Volume']),
+        })
+
     return data
+
 
 def main():
     if not os.path.exists(WORKSPACE_PATH):
-        print(f"Error: {WORKSPACE_PATH} not found")
+        print(f'Error: {WORKSPACE_PATH} not found')
         return
 
     with open(WORKSPACE_PATH, 'r') as f:
         workspace = json.load(f)
 
-    updated_count = 0
-    
+    print('Fetching real AAPL data from Yahoo Finance...')
+    historical_data = fetch_aapl_data(days=90)
+    print(f'Fetched {len(historical_data)} records from {historical_data[0]["date"]} to {historical_data[-1]["date"]}')
+
     resources = workspace
     if isinstance(workspace, dict) and 'resources' in workspace:
         resources = workspace['resources']
-    
-    historical_data = generate_historical_data()
-    print(f"Generated {len(historical_data)} records from {historical_data[0]['date']} to {historical_data[-1]['date']}")
-    
+
+    updated_count = 0
     for res in resources:
         if res.get('_type') == 'request':
-            # Update "Predict Custom (User Data)"
             if res.get('name') == 'Predict Custom (User Data)' or 'predict-custom' in res.get('url', ''):
                 try:
-                    # We rewrite the whole body
                     new_body = {
-                        "days_ahead": 7,
-                        "historical_data": historical_data
+                        'days_ahead': 7,
+                        'historical_data': historical_data,
                     }
                     res['body']['text'] = json.dumps(new_body, indent=2)
-                    print(f"Updated {res['name']} with 90 days of data ending {historical_data[-1]['date']}")
+                    print(f'Updated {res["name"]} with real AAPL data ending {historical_data[-1]["date"]}')
                     updated_count += 1
                 except Exception as e:
-                    print(f"Failed to update custom: {e}")
+                    print(f'Failed to update custom: {e}')
 
     with open(WORKSPACE_PATH, 'w') as f:
         json.dump(workspace, f, indent=2)
-        
-    print(f"Saved {WORKSPACE_PATH}. Updated {updated_count} requests.")
+
+    print(f'Saved {WORKSPACE_PATH}. Updated {updated_count} requests.')
+
 
 if __name__ == '__main__':
     main()

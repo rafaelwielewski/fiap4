@@ -1,20 +1,20 @@
 {
   "model": {
-    "mae_price": 2.8174686431884766,
-    "rmse_price": 4.251648975685924,
-    "mape_price_pct": 1.236272044479847,
-    "directional_accuracy_pct": 52.8052805280528
+    "mae_price": 1.9694921970367432,
+    "rmse_price": 2.6922991286131093,
+    "mape_price_pct": 1.0651218704879284,
+    "directional_accuracy_pct": 48.971193415637856
   },
   "baselines": {
     "naive": {
-      "mae_price": 2.8258464336395264,
-      "rmse_price": 4.241585648418078,
-      "mape_price_pct": 1.2395815923810005
+      "mae_price": 1.967570185661316,
+      "rmse_price": 2.671806736124261,
+      "mape_price_pct": 1.0638678446412086
     },
     "sma_60": {
-      "mae_price": 14.022299723945174,
-      "rmse_price": 16.80749619073476,
-      "mape_price_pct": 5.982534242267654
+      "mae_price": 11.124196882208679,
+      "rmse_price": 14.03432189442748,
+      "mape_price_pct": 5.843635421669976
     }
   }
 }

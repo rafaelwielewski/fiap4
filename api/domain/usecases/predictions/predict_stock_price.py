@@ -102,12 +102,13 @@ class PredictStockPriceUseCase:
         feats = feats.dropna()
         return feats
 
-    def _predict_future(self, feature_df: pd.DataFrame, last_date: str, days_ahead: int) -> List[PredictedPrice]:
+    def _predict_future(self, raw_df: pd.DataFrame, last_date: str, days_ahead: int) -> List[PredictedPrice]:
         """
         Generate predictions for the next N days.
 
-        Since the model predicts delta for HORIZON days ahead,
-        we step forward in HORIZON-day chunks.
+        Receives raw OHLCV data and rebuilds all features from scratch at each
+        step, so derived indicators (SMA, EMA, RSI…) evolve naturally with the
+        predicted prices instead of remaining frozen.
         """
         feature_cols = [
             'close', 'high', 'low', 'open', 'volume',
@@ -118,34 +119,35 @@ class PredictStockPriceUseCase:
             'vol_7', 'vol_21'
         ]
 
-        X_raw = feature_df[feature_cols].values
-        X_scaled = self.scaler_X.transform(X_raw)
-
-        # We need at least lookback rows
-        if len(X_scaled) < self.lookback:
+        # Validate: after dropna inside _build_features_from_df we must still
+        # have at least lookback rows available.
+        initial_feats = self._build_features_from_df(raw_df)
+        if len(initial_feats) < self.lookback:
             raise ValueError(
                 f'Dados insuficientes após feature engineering. '
-                f'Necessário: {self.lookback}, disponível: {len(X_scaled)}'
+                f'Necessário: {self.lookback}, disponível: {len(initial_feats)}'
             )
+
+        raw_df = raw_df[['close', 'high', 'low', 'open', 'volume']].reset_index(drop=True).copy()
 
         predictions = []
         current_date = datetime.strptime(last_date, '%Y-%m-%d')
-        current_close = float(feature_df['close'].iloc[-1])
-
-        # Use the last lookback rows as the initial sequence
-        sequence = X_scaled[-self.lookback:]
 
         steps = (days_ahead + self.horizon - 1) // self.horizon  # ceiling division
-        for step in range(steps):
-            input_seq = sequence[-self.lookback:].reshape(1, self.lookback, len(feature_cols)).astype(np.float32)
-            
-            # Use ONNX Runtime for prediction
+        for _ in range(steps):
+            # Rebuild all features from the current raw OHLCV window
+            feats = self._build_features_from_df(raw_df)
+
+            X_scaled = self.scaler_X.transform(feats[feature_cols].values)
+            input_seq = X_scaled[-self.lookback:].reshape(1, self.lookback, len(feature_cols)).astype(np.float32)
+
             pred_delta_scaled = self.model_sess.run(None, {self.input_name: input_seq})[0]
-            
             pred_delta = self.scaler_y.inverse_transform(pred_delta_scaled)[0][0]
+
+            current_close = float(feats['close'].iloc[-1])
             pred_price = current_close + float(pred_delta)
 
-            # Advance by horizon days (business days)
+            # Advance by horizon business days
             target_date = current_date
             for _ in range(self.horizon):
                 target_date += timedelta(days=1)
@@ -160,13 +162,24 @@ class PredictStockPriceUseCase:
             if len(predictions) >= days_ahead:
                 break
 
-            # Update for next step
-            current_close = pred_price
-            current_date = target_date
+            # Append a synthetic OHLCV row using the predicted close.
+            # Spreads and volume are estimated from recent rolling averages
+            # so that derived indicators (SMA, EMA, RSI…) evolve naturally.
+            avg_spread_high = float((raw_df['high'] - raw_df['close']).tail(20).mean())
+            avg_spread_low = float((raw_df['close'] - raw_df['low']).tail(20).mean())
+            avg_open_diff = float((raw_df['open'] - raw_df['close']).tail(20).mean())
+            avg_volume = float(raw_df['volume'].tail(20).mean())
 
-            # Shift the sequence forward (approximate: repeat last row with updated close)
-            new_row = sequence[-1].copy()
-            sequence = np.vstack([sequence[1:], new_row.reshape(1, -1)])
+            new_row = pd.DataFrame([{
+                'close': pred_price,
+                'high': pred_price + avg_spread_high,
+                'low': pred_price - avg_spread_low,
+                'open': pred_price + avg_open_diff,
+                'volume': avg_volume,
+            }])
+            raw_df = pd.concat([raw_df, new_row], ignore_index=True)
+
+            current_date = target_date
 
         return predictions[:days_ahead]
 
@@ -190,11 +203,9 @@ class PredictStockPriceUseCase:
             'low': d.low, 'close': d.close, 'volume': d.volume
         } for d in latest_data])
 
-        # Build features
-        feature_df = self._build_features_from_df(df)
         last_date = latest_data[-1].date
 
-        predictions = self._predict_future(feature_df, last_date, days_ahead)
+        predictions = self._predict_future(df, last_date, days_ahead)
 
         # Build metrics response
         metrics_dict = {}
@@ -241,10 +252,9 @@ class PredictStockPriceUseCase:
         if 'volume' not in df.columns:
             df['volume'] = 0
 
-        feature_df = self._build_features_from_df(df)
         last_date = historical_prices[-1]['date']
 
-        predictions = self._predict_future(feature_df, last_date, days_ahead)
+        predictions = self._predict_future(df, last_date, days_ahead)
 
         metrics_dict = {}
         if self.metrics and 'model' in self.metrics:

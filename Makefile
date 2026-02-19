@@ -33,6 +33,7 @@ dev:
 # Train the LSTM model
 train:
 	poetry run python scripts/train_model.py
+	poetry run python scripts/convert_to_onnx.py
 
 deploy-prod:
 	vercel --prod
