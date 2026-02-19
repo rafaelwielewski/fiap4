@@ -38,7 +38,7 @@ deploy-prod:
 	vercel --prod
 
 deploy-dev:
-	vercel --dev
+	vercel
 
 # Start Streamlit monitoring dashboard
 dashboard:

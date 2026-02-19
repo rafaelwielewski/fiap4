@@ -97,12 +97,13 @@ def show_overview():
             st.metric('Status da API', f'{icon} {status}')
 
         with col2:
-            records = health_data.get('data_records', 0)
+            data_info = health_data.get('data', {})
+            records = data_info.get('total_records', 0)
             st.metric('Registros de Dados', records)
 
     if model_data:
         with col3:
-            version = model_data.get('model_version', 'N/A')
+            version = model_data.get('version', 'N/A')
             st.metric('Versão do Modelo', version)
 
         with col4:
@@ -114,27 +115,46 @@ def show_overview():
         st.subheader('🤖 Métricas do Modelo LSTM')
         metrics = model_data['metrics']
 
-        col1, col2, col3 = st.columns(3)
+        mape = metrics.get('mape', 0)
+        accuracy = metrics.get('accuracy', round(100 - mape, 2) if mape else 'N/A')
+        r2 = metrics.get('r2', 'N/A')
+
+        col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
-            st.metric('MAE', f"{metrics.get('mae', 'N/A')}")
+            st.metric('🎯 Acurácia', f'{accuracy}%')
         with col2:
-            st.metric('RMSE', f"{metrics.get('rmse', 'N/A')}")
+            r2_display = f'{r2:.4f}' if isinstance(r2, (int, float)) else r2
+            st.metric('R²', r2_display)
         with col3:
-            st.metric('MAPE', f"{metrics.get('mape', 'N/A')}%")
+            st.metric('MAE', f"{metrics.get('mae', 'N/A')}")
+        with col4:
+            st.metric('RMSE', f"{metrics.get('rmse', 'N/A')}")
+        with col5:
+            st.metric('MAPE', f"{mape}%")
+
+        st.info(
+            '**Acurácia** = 100% - MAPE. '
+            '**R²** (Coeficiente de Determinação): quanto da variância o modelo explica (0 a 1). '
+            '**MAE**: erro médio absoluto em R$. '
+            '**RMSE**: penaliza erros grandes. '
+            '**MAPE**: erro percentual médio.'
+        )
 
         # Arquitetura do modelo
         st.subheader('🏗️ Arquitetura do Modelo')
+        training_period = model_data.get('training_period', {})
+        last_trained = model_data.get('last_trained', '')
         col1, col2 = st.columns(2)
         with col1:
             st.markdown(f"""
             - **Tipo:** LSTM (Long Short-Term Memory)
-            - **Unidades LSTM:** {model_data.get('lstm_units', 'N/A')}
             - **Sequência:** {model_data.get('sequence_length', 'N/A')} dias
+            - **Features:** {', '.join(model_data.get('features_used', ['N/A']))}
             """)
         with col2:
             st.markdown(f"""
-            - **Período treino:** {model_data.get('training_start', 'N/A')} a {model_data.get('training_end', 'N/A')}
-            - **Treinado em:** {model_data.get('trained_at', 'N/A')[:10] if model_data.get('trained_at') else 'N/A'}
+            - **Período treino:** {training_period.get('start', 'N/A')} a {training_period.get('end', 'N/A')}
+            - **Treinado em:** {last_trained[:10] if last_trained else 'N/A'}
             """)
 
     # Resumo de atividade
