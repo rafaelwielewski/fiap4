@@ -390,59 +390,33 @@ def show_predictions():
 
     st.markdown('Teste o modelo LSTM de predição de preços diretamente pelo dashboard.')
 
-    # Input
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        days_ahead = st.slider('Dias para prever', min_value=1, max_value=30, value=7)
-        predict_btn = st.button('🚀 Gerar Predição', use_container_width=True)
+    predict_btn = st.button('🚀 Gerar Predição', use_container_width=True)
 
     if predict_btn:
         with st.spinner('Gerando predição...'):
-            result = fetch_api_data(
-                '/api/v1/predictions/predict',
-                method='POST',
-                json_body={'days_ahead': days_ahead},
-            )
+            result = fetch_api_data('/api/v1/predictions/predict', method='GET')
 
-        if result and result.get('predictions'):
-            predictions = result['predictions']
-            pred_df = pd.DataFrame(predictions)
+        if result and result.get('prediction'):
+            prediction = result['prediction']
+            currency = 'R$' if result.get('symbol', '').endswith('.SA') else '$'
 
-            # Métricas
             st.subheader('📊 Resultado da Predição')
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric('Símbolo', result.get('symbol', 'N/A'))
             with col2:
-                st.metric('Dias Previstos', len(predictions))
+                st.metric('Data Prevista', prediction.get('date', 'N/A'))
             with col3:
                 if result.get('metrics'):
                     st.metric('MAPE do Modelo', f"{result['metrics'].get('mape', 'N/A')}%")
-            
-            currency = 'R$' if result.get('symbol', '').endswith('.SA') else '$'
 
-            # Gráfico de predições
-            if 'date' in pred_df.columns and 'predicted_close' in pred_df.columns:
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=pred_df['date'],
-                    y=pred_df['predicted_close'],
-                    mode='lines+markers',
-                    name='Preço Previsto',
-                    line=dict(color='#ff6b6b', width=2, dash='dash'),
-                    marker=dict(size=8),
-                ))
-                fig.update_layout(
-                    title=f'Predição de Preços - Próximos {days_ahead} dias',
-                    xaxis_title='Data',
-                    yaxis_title=f'Preço Previsto ({currency})',
-                    template='plotly_dark',
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            st.metric(
+                f'Preço Previsto ({currency})',
+                f"{currency} {prediction.get('predicted_close', 'N/A')}",
+            )
 
-            # Tabela
             st.subheader('📋 Dados da Predição')
-            st.dataframe(pred_df, use_container_width=True)
+            st.dataframe(pd.DataFrame([prediction]), use_container_width=True)
 
     # Info do modelo
     st.markdown('---')

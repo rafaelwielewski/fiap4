@@ -4,11 +4,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class PredictionRequest(BaseModel):
-    """Parâmetros para predição de preço de ação."""
-    days_ahead: int = Field(default=7, ge=1, le=30, description='Número de dias para prever (1-30)')
-
-
 class HistoricalPrice(BaseModel):
     """Preço histórico fornecido pelo usuário."""
     date: str = Field(description='Data no formato YYYY-MM-DD')
@@ -17,7 +12,6 @@ class HistoricalPrice(BaseModel):
 
 class CustomPredictionRequest(BaseModel):
     """Predição com dados históricos fornecidos pelo usuário."""
-    days_ahead: int = Field(default=7, ge=1, le=30, description='Número de dias para prever (1-30)')
     historical_data: List[HistoricalPrice] = Field(
         description='Lista de preços históricos de fechamento (mínimo 90 registros para cálculo de indicadores)',
         min_length=90
@@ -33,7 +27,7 @@ class PredictedPrice(BaseModel):
 class PredictionResponse(BaseModel):
     """Resultado da predição de preços."""
     symbol: str
-    predictions: List[PredictedPrice]
+    prediction: PredictedPrice
     model_version: str
     generated_at: str
     metrics: Dict[str, float]

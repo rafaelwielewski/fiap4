@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.domain.models.prediction import PredictionRequest, CustomPredictionRequest, PredictionResponse, ModelInfo
+from api.domain.models.prediction import CustomPredictionRequest, PredictionResponse, ModelInfo
 from api.domain.repositories.stock_repository import StockRepository
 from api.domain.usecases.predictions.predict_stock_price import PredictStockPriceUseCase
 from api.domain.usecases.predictions.get_model_info import GetModelInfoUseCase
@@ -11,23 +11,18 @@ from api.utils.logger import logger
 router = APIRouter(route_class=DefaultRouter)
 
 
-@router.post('/predict',
-             summary='Prediz preços futuros da ação',
-             response_model=PredictionResponse)
-def predict_price(
-    request: PredictionRequest,
-    repository: StockRepository = Depends(build_stock_repository)
-):
+@router.get('/predict',
+            summary='Prediz o preço de fechamento daqui 5 dias úteis',
+            response_model=PredictionResponse)
+def predict_price(repository: StockRepository = Depends(build_stock_repository)):
     """
-    Realiza predição de preços futuros usando o modelo LSTM.
-
-    Envie o número de dias para prever (1-30) e receba as predições.
-    Utiliza os dados históricos pré-carregados da ação AAPL.
+    Retorna a previsão de preço de fechamento da AAPL para 5 dias úteis à frente,
+    utilizando o modelo LSTM treinado com janela de 60 dias.
     """
     try:
         use_case = PredictStockPriceUseCase(repository)
-        result = use_case.execute(days_ahead=request.days_ahead)
-        logger.info(f'Predição realizada: {request.days_ahead} dias')
+        result = use_case.execute()
+        logger.info('Predição realizada: 5 dias úteis à frente')
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -37,27 +32,21 @@ def predict_price(
 
 
 @router.post('/predict-custom',
-             summary='Prediz preços futuros com dados fornecidos pelo usuário',
+             summary='Prediz o preço daqui 5 dias com dados fornecidos pelo usuário',
              response_model=PredictionResponse)
 def predict_custom(
     request: CustomPredictionRequest,
     repository: StockRepository = Depends(build_stock_repository)
 ):
     """
-    Realiza predição de preços futuros usando dados históricos fornecidos pelo usuário.
-
-    O usuário deve fornecer ao menos 60 registros de preços históricos (date + close)
-    e o número de dias para prever (1-30). O modelo LSTM processa os dados e retorna
-    as predições futuras.
+    Recebe dados históricos de fechamento (mínimo 90 registros) e retorna
+    a previsão de preço para 5 dias úteis à frente.
     """
     try:
         use_case = PredictStockPriceUseCase(repository)
         historical_data = [{'date': p.date, 'close': p.close} for p in request.historical_data]
-        result = use_case.execute_custom(
-            historical_prices=historical_data,
-            days_ahead=request.days_ahead
-        )
-        logger.info(f'Predição customizada: {len(request.historical_data)} registros, {request.days_ahead} dias')
+        result = use_case.execute_custom(historical_prices=historical_data)
+        logger.info(f'Predição customizada: {len(request.historical_data)} registros')
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

@@ -40,22 +40,17 @@ api/
 ### Exemplo de Predição
 
 ```bash
-curl -X POST http://localhost:8081/api/v1/predictions/predict \
-  -H "Content-Type: application/json" \
-  -d '{"days_ahead": 7}'
+curl http://localhost:8081/api/v1/predictions/predict
 ```
 
 **Resposta:**
 ```json
 {
   "symbol": "AAPL",
-  "predictions": [
-    {"date": "2024-07-22", "predicted_close": 185.45},
-    {"date": "2024-07-23", "predicted_close": 186.12}
-  ],
-  "model_version": "1.0.0",
-  "generated_at": "2024-07-20T15:30:00",
-  "metrics": {"mae": 2.34, "rmse": 3.12, "mape": 2.89}
+  "prediction": {"date": "2026-02-26", "predicted_close": 241.25},
+  "model_version": "2.0.0",
+  "generated_at": "2026-02-19T20:35:00",
+  "metrics": {"mae": 7.32, "rmse": 9.86, "mape": 3.26, "directional_accuracy": 51.52}
 }
 ```
 
