@@ -12,3 +12,7 @@ numpy==1.26.4
 joblib==1.5.3
 scikit-learn==1.4.2
 onnxruntime==1.20.1
+
+# Dashboard dependencies (Streamlit Community Cloud)
+plotly>=5.18.0
+requests>=2.31.0
