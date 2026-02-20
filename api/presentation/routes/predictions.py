@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.domain.models.prediction import CustomPredictionRequest, PredictionResponse, ModelInfo
+from api.domain.models.prediction import PredictionResponse, ModelInfo
 from api.domain.repositories.stock_repository import StockRepository
 from api.domain.usecases.predictions.predict_stock_price import PredictStockPriceUseCase
 from api.domain.usecases.predictions.get_model_info import GetModelInfoUseCase
@@ -14,44 +14,23 @@ router = APIRouter(route_class=DefaultRouter)
 @router.get('/predict',
             summary='Prediz o preço de fechamento daqui 5 dias úteis',
             response_model=PredictionResponse)
-def predict_price(repository: StockRepository = Depends(build_stock_repository)):
+def predict_price(
+    days: int = Query(default=90, ge=60, description='Número de pregões históricos a considerar (mínimo 60)'),
+    repository: StockRepository = Depends(build_stock_repository),
+):
     """
-    Retorna a previsão de preço de fechamento da AAPL para 5 dias úteis à frente,
-    utilizando o modelo LSTM treinado com janela de 60 dias.
+    Retorna a previsão de preço de fechamento da AAPL para 5 dias úteis à frente.
+    O parâmetro `days` define quantos pregões históricos serão usados (padrão: 90).
     """
     try:
         use_case = PredictStockPriceUseCase(repository)
-        result = use_case.execute()
-        logger.info('Predição realizada: 5 dias úteis à frente')
+        result = use_case.execute(days=days)
+        logger.info(f'Predição realizada com {days} dias históricos')
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f'Erro na predição: {str(e)}')
-        raise HTTPException(status_code=500, detail=f'Erro ao realizar predição: {str(e)}') from e
-
-
-@router.post('/predict-custom',
-             summary='Prediz o preço daqui 5 dias com dados fornecidos pelo usuário',
-             response_model=PredictionResponse)
-def predict_custom(
-    request: CustomPredictionRequest,
-    repository: StockRepository = Depends(build_stock_repository)
-):
-    """
-    Recebe dados históricos de fechamento (mínimo 90 registros) e retorna
-    a previsão de preço para 5 dias úteis à frente.
-    """
-    try:
-        use_case = PredictStockPriceUseCase(repository)
-        historical_data = [{'date': p.date, 'close': p.close} for p in request.historical_data]
-        result = use_case.execute_custom(historical_prices=historical_data)
-        logger.info(f'Predição customizada: {len(request.historical_data)} registros')
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f'Erro na predição customizada: {str(e)}')
         raise HTTPException(status_code=500, detail=f'Erro ao realizar predição: {str(e)}') from e
 
 

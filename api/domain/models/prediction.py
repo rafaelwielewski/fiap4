@@ -4,19 +4,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class HistoricalPrice(BaseModel):
-    """Preço histórico fornecido pelo usuário."""
-    date: str = Field(description='Data no formato YYYY-MM-DD')
-    close: float = Field(description='Preço de fechamento')
-
-
-class CustomPredictionRequest(BaseModel):
-    """Predição com dados históricos fornecidos pelo usuário."""
-    historical_data: List[HistoricalPrice] = Field(
-        description='Lista de preços históricos de fechamento (mínimo 90 registros para cálculo de indicadores)',
-        min_length=90
-    )
-
 
 class PredictedPrice(BaseModel):
     """Um preço previsto para uma data futura."""

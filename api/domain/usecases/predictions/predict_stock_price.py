@@ -1,7 +1,6 @@
 import json
 import os
 from datetime import datetime, timedelta
-from typing import List
 
 import joblib
 import numpy as np
@@ -77,12 +76,12 @@ class PredictStockPriceUseCase:
         f['vol_21'] = f['ret_1'].rolling(21).std()
         return f.dropna()
 
-    def _predict(self, raw_df: pd.DataFrame, last_date: str) -> PredictedPrice:
-        feats = self._build_features(raw_df)
+    def _predict(self, df: pd.DataFrame, last_date: str) -> PredictedPrice:
+        feats = self._build_features(df)
         if len(feats) < self.lookback:
             raise ValueError(f'Dados insuficientes: necessário {self.lookback}, disponível {len(feats)}')
 
-        raw_df = raw_df[['close', 'high', 'low', 'open', 'volume']].reset_index(drop=True).copy()
+        raw_df = df[['close', 'high', 'low', 'open', 'volume']].reset_index(drop=True).copy()
         current_date = datetime.strptime(last_date, '%Y-%m-%d')
 
         for step in range(FORECAST_HORIZON):
@@ -118,43 +117,23 @@ class PredictStockPriceUseCase:
             }
         return {}
 
-    def execute(self) -> PredictionResponse:
+    def execute(self, days: int = 90) -> PredictionResponse:
         if self.model_sess is None:
             raise ValueError('Modelo não carregado.')
 
-        needed = self.lookback + 30
-        latest_data = self.repository.get_latest_data(needed)
-        if len(latest_data) < needed:
-            raise ValueError(f'Dados insuficientes: necessário {needed}, disponível {len(latest_data)}')
+        latest_data = self.repository.get_latest_data(days)
 
-        df = pd.DataFrame([{'date': d.date, 'open': d.open, 'high': d.high, 'low': d.low, 'close': d.close, 'volume': d.volume} for d in latest_data])
+        if len(latest_data) < self.lookback:
+            raise ValueError(f'Dados insuficientes: necessário {self.lookback} pregões, obtido {len(latest_data)}. Aumente o parâmetro days.')
+
+        df = pd.DataFrame([{
+            'date': d.date, 'open': d.open, 'high': d.high,
+            'low': d.low, 'close': d.close, 'volume': d.volume,
+        } for d in latest_data])
 
         return PredictionResponse(
             symbol=self.metadata.get('symbol', 'AAPL') if self.metadata else 'AAPL',
             prediction=self._predict(df, latest_data[-1].date),
-            model_version='2.0.0',
-            generated_at=datetime.now().isoformat(),
-            metrics=self._build_metrics(),
-        )
-
-    def execute_custom(self, historical_prices: List[dict]) -> PredictionResponse:
-        if self.model_sess is None:
-            raise ValueError('Modelo não carregado.')
-
-        needed = self.lookback + 30
-        if len(historical_prices) < needed:
-            raise ValueError(f'Dados insuficientes: forneça ao menos {needed} registros. Recebido: {len(historical_prices)}')
-
-        df = pd.DataFrame(historical_prices)
-        for col in ['open', 'high', 'low']:
-            if col not in df.columns:
-                df[col] = df['close']
-        if 'volume' not in df.columns:
-            df['volume'] = 0
-
-        return PredictionResponse(
-            symbol='Custom',
-            prediction=self._predict(df, historical_prices[-1]['date']),
             model_version='2.0.0',
             generated_at=datetime.now().isoformat(),
             metrics=self._build_metrics(),

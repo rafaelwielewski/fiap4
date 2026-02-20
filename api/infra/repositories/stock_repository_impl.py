@@ -1,10 +1,13 @@
 import os
 
 import pandas as pd
+import yfinance as yf
 from fastapi import HTTPException
 
 from api.domain.models.stock import StockData
 from api.domain.repositories.stock_repository import StockRepository
+
+SYMBOL = 'AAPL'
 
 
 class StockRepositoryImpl(StockRepository):
@@ -48,12 +51,23 @@ class StockRepositoryImpl(StockRepository):
         return data
 
     def get_latest_data(self, n: int = 60) -> list[StockData]:
-        """Get the latest N records of stock data."""
-        df = self._get_dataframe()
-        df = df.tail(n)
-        data = []
-
-        for _, row in df.iterrows():
-            data.append(self._to_model(row))
-
-        return data
+        """Get the latest N trading days from yfinance."""
+        try:
+            raw = yf.download(SYMBOL, period=f'{n + 10}d', auto_adjust=True, progress=False)
+            if isinstance(raw.columns, pd.MultiIndex):
+                raw.columns = raw.columns.get_level_values(0)
+            raw = raw.rename(columns=str.title)
+            raw = raw[['Open', 'High', 'Low', 'Close', 'Volume']].dropna().tail(n).reset_index()
+            return [
+                StockData(
+                    date=str(row['Date'].date()),
+                    open=float(row['Open']),
+                    high=float(row['High']),
+                    low=float(row['Low']),
+                    close=float(row['Close']),
+                    volume=int(row['Volume']),
+                )
+                for _, row in raw.iterrows()
+            ]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Erro ao buscar dados do yfinance: {str(e)}') from e
