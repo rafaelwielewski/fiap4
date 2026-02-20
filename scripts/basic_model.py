@@ -1,21 +1,3 @@
-"""
-Script de treinamento do modelo LSTM para predição de preços de ações.
-
-Este script:
-1. Baixa dados históricos da ação Petrobras (PETR4.SA) usando yfinance
-2. Pré-processa os dados com MinMaxScaler
-3. Treina um modelo LSTM com Keras/TensorFlow
-4. Avalia o modelo com métricas MAE, RMSE e MAPE
-5. Salva os pesos do modelo em JSON (para inferência com numpy)
-6. Salva os parâmetros do scaler em JSON
-7. Salva os dados históricos em CSV
-
-Uso:
-    cd fiap4
-    pip install tensorflow yfinance scikit-learn matplotlib
-    python scripts/train_model.py
-"""
-
 import json
 import os
 import sys
@@ -28,14 +10,12 @@ import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-# TensorFlow imports
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
 
-# Configuration
 SYMBOL = 'PETR4.SA'
 START_DATE = '2018-01-01'
 END_DATE = datetime.today().strftime('%Y-%m-%d')
@@ -47,12 +27,10 @@ TEST_SPLIT = 0.2
 MODEL_VERSION = '1.0.0'
 VAL_SPLIT = 0.1
 
-# Paths
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
 
 
 def download_data():
-    """Download stock data from Yahoo Finance."""
     print(f'📥 Baixando dados de {SYMBOL} ({START_DATE} a {END_DATE})...')
     df = yf.download(SYMBOL, start=START_DATE, end=END_DATE)
 
@@ -60,7 +38,6 @@ def download_data():
         print('❌ Nenhum dado encontrado!')
         sys.exit(1)
 
-    # Flatten MultiIndex columns if present
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
@@ -69,14 +46,6 @@ def download_data():
 
 
 def prepare_data_no_leakage(df: pd.DataFrame):
-    """
-    Prepara dados SEM leakage:
-    1) split temporal em train/val/test no eixo do tempo
-    2) scaler fit somente no treino
-    3) cria janelas (lookback=SEQUENCE_LENGTH)
-       - train/val: só dentro do bloco de treino
-       - test: usa contexto dos últimos lookback pontos do treino+val, mas targets só do bloco de teste
-    """
     print("🔧 Preparando dados (SEM leakage)...")
 
     close = df["Close"].astype(float).values.reshape(-1, 1)
@@ -142,9 +111,6 @@ def prepare_data_no_leakage(df: pd.DataFrame):
 
 
 def build_model():
-    """
-    Experimento 1: LSTM simples, sem camadas adicionais.
-    """
     print("🏗️  Construindo modelo LSTM...")
 
     model = tf.keras.Sequential([
@@ -202,45 +168,28 @@ def plot_training_curves(history, out_dir, prefix="exp1_petr4_d1"):
     print(f"📉 Curvas de treino salvas em: {out_dir}")
 
 def evaluate_model(model, X_test, y_test, scaler, dates_test):
-    """Evaluate model, baselines, and directional accuracy (t+1) with fair direction baselines."""
     print('📊 Avaliando modelo (TEST)...')
 
-    # -------------------------
-    # 1) Predictions (scaled)
-    # -------------------------
     pred_scaled = model.predict(X_test, verbose=0)
 
-    # Denormalize
-    pred_price = scaler.inverse_transform(pred_scaled)   # y_hat(t+1)
-    true_price = scaler.inverse_transform(y_test)        # y_true(t+1)
+    pred_price = scaler.inverse_transform(pred_scaled)
+    true_price = scaler.inverse_transform(y_test)
 
-    # close_t and close_(t-1) from window (scaled -> denorm)
     close_t_scaled   = X_test[:, -1, 0].reshape(-1, 1)
     close_tm1_scaled = X_test[:, -2, 0].reshape(-1, 1)
 
     close_t   = scaler.inverse_transform(close_t_scaled)
     close_tm1 = scaler.inverse_transform(close_tm1_scaled)
 
-    # -------------------------
-    # 2) Baselines
-    # -------------------------
-    # Baseline A: naive-price (pred = close_t)
     naive_price = close_t
 
-    # Baseline B: naive-momentum (pred move = last move)
     last_move = close_t - close_tm1
     naive_momentum = close_t + last_move
 
-    # Baseline C: always-up / always-down (for direction reference)
-    # For direction, we only need predicted move sign
-    # We'll set tiny epsilon move to force sign (+/-)
     eps = 1e-6
     always_up = close_t + eps
     always_down = close_t - eps
 
-    # -------------------------
-    # 3) Metrics helpers
-    # -------------------------
     def calc_metrics(y_true, y_pred):
         mae = mean_absolute_error(y_true, y_pred)
         rmse = np.sqrt(mean_squared_error(y_true, y_pred))
@@ -249,10 +198,6 @@ def evaluate_model(model, X_test, y_test, scaler, dates_test):
         return float(mae), float(rmse), float(mape), float(r2)
 
     def directional_accuracy(y_true_price, y_pred_price, close_t_price, ignore_zeros=True):
-        """
-        Direction defined by sign of (t+1 - t).
-        If ignore_zeros=True: excludes cases where either true_move==0 or pred_move==0.
-        """
         true_move = (y_true_price - close_t_price).reshape(-1)
         pred_move = (y_pred_price - close_t_price).reshape(-1)
 
@@ -268,31 +213,21 @@ def evaluate_model(model, X_test, y_test, scaler, dates_test):
         return float((true_sign == pred_sign).mean() * 100.0)
 
     def rel_improve(baseline, model_value):
-        # improvement % where lower is better
         return (baseline - model_value) / (baseline + 1e-9) * 100.0
 
-    # -------------------------
-    # 4) Compute metrics (price)
-    # -------------------------
     mae, rmse, mape, r2 = calc_metrics(true_price, pred_price)
 
     naive_mae, naive_rmse, naive_mape, naive_r2 = calc_metrics(true_price, naive_price)
     mom_mae, mom_rmse, mom_mape, mom_r2 = calc_metrics(true_price, naive_momentum)
 
-    # -------------------------
-    # 5) Directional accuracy (fair)
-    # -------------------------
     dir_acc = directional_accuracy(true_price, pred_price, close_t, ignore_zeros=True)
 
-    naive_price_dir = directional_accuracy(true_price, naive_price, close_t, ignore_zeros=True)      # likely near 0 if ignore_zeros=False; with ignore_zeros=True it becomes "undefined-like" (drops zero preds)
+    naive_price_dir = directional_accuracy(true_price, naive_price, close_t, ignore_zeros=True)
     mom_dir = directional_accuracy(true_price, naive_momentum, close_t, ignore_zeros=True)
 
     up_dir = directional_accuracy(true_price, always_up, close_t, ignore_zeros=True)
     down_dir = directional_accuracy(true_price, always_down, close_t, ignore_zeros=True)
 
-    # -------------------------
-    # 6) Print summary
-    # -------------------------
     print("\n=== LSTM (t+1) ===")
     print(f"  MAE :  {mae:.4f}")
     print(f"  RMSE:  {rmse:.4f}")
@@ -311,9 +246,6 @@ def evaluate_model(model, X_test, y_test, scaler, dates_test):
     print(f"  Always-down   : {down_dir:.2f}%")
     print(f"  Naive-price   : {naive_price_dir:.2f}%  (tende a ser baixo porque movimento previsto é ~0)")
 
-    # -------------------------
-    # 7) Improvements vs baselines
-    # -------------------------
     improvements_vs_naive_price = {
         "mae_improve_pct": float(rel_improve(naive_mae, mae)),
         "rmse_improve_pct": float(rel_improve(naive_rmse, rmse)),
@@ -329,18 +261,12 @@ def evaluate_model(model, X_test, y_test, scaler, dates_test):
         "dir_acc_delta_pct_points": float(dir_acc - mom_dir),
     }
 
-    # -------------------------
-    # 8) Return (compatível com seu main + dados extras)
-    # -------------------------
     metrics = {
-        # compatível com seu main antigo
         "mae": round(mae, 6),
         "rmse": round(rmse, 6),
         "mape": round(mape, 6),
         "r2": round(r2, 6),
         "directional_accuracy_pct": round(dir_acc, 6),
-
-        # extras completos
         "lstm": {
             "mae": round(mae, 6),
             "rmse": round(rmse, 6),
@@ -388,7 +314,6 @@ def evaluate_model(model, X_test, y_test, scaler, dates_test):
 
 
 def extract_weights(model):
-    # pega LSTM "de verdade" e também wrappers tipo Bidirectional(LSTM) ou RNN(LSTMCell)
     lstm_layers = []
     for layer in model.layers:
         if isinstance(layer, tf.keras.layers.LSTM):
@@ -396,8 +321,6 @@ def extract_weights(model):
         elif isinstance(layer, tf.keras.layers.Bidirectional) and isinstance(layer.layer, tf.keras.layers.LSTM):
             lstm_layers.append(layer.layer)
         elif isinstance(layer, tf.keras.layers.RNN) and isinstance(layer.cell, tf.keras.layers.LSTMCell):
-            # RNN(LSTMCell) não tem get_weights igual ao LSTM? tem, mas vem do wrapper RNN.
-            # Aqui guardamos o wrapper, que também expõe get_weights()
             lstm_layers.append(layer)
 
     if not lstm_layers:
@@ -405,7 +328,7 @@ def extract_weights(model):
 
     extracted = []
     for i, lstm in enumerate(lstm_layers):
-        w = lstm.get_weights()  # [kernel, recurrent_kernel, bias]
+        w = lstm.get_weights()
         extracted.append({
             "layer_index": i,
             "name": lstm.name,
@@ -427,12 +350,6 @@ def plot_experiment1_graphs(
     out_dir,
     prefix="exp1_petr4_d1"
 ):
-    """
-    Salva 3 gráficos:
-    1) Real vs Pred (LSTM e Naive)
-    2) Erro absoluto ao longo do tempo (LSTM e Naive)
-    3) Histograma do erro absoluto (LSTM e Naive)
-    """
     os.makedirs(out_dir, exist_ok=True)
 
     dates = np.asarray(dates_test)
@@ -477,12 +394,10 @@ def plot_experiment1_graphs(
     print(f"📈 Gráficos salvos em: {out_dir}")
 
 def save_artifacts(df, weights, scaler, metrics):
-    """Save model artifacts to data directory."""
     print('💾 Salvando artefatos...')
 
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    # Save stock data CSV
     csv_path = os.path.join(DATA_DIR, 'stock_data.csv')
     df_save = df.copy()
     df_save.index.name = 'Date'
@@ -491,7 +406,6 @@ def save_artifacts(df, weights, scaler, metrics):
     df_save.to_csv(csv_path, index=False)
     print(f'  ✅ Dados salvos: {csv_path} ({len(df_save)} registros)')
 
-    # Save model weights
     weights_path = os.path.join(DATA_DIR, 'model_weights.json')
     weights_dict = weights_to_jsonable(weights)
     model_data = {
@@ -510,7 +424,6 @@ def save_artifacts(df, weights, scaler, metrics):
         json.dump(model_data, f)
     print(f'  ✅ Pesos do modelo salvos: {weights_path}')
 
-    # Save scaler parameters
     scaler_path = os.path.join(DATA_DIR, 'scaler_params.json')
     scaler_data = {
         'min': float(scaler.data_min_[0]),
@@ -523,7 +436,6 @@ def save_artifacts(df, weights, scaler, metrics):
     print(f'  ✅ Parâmetros do scaler salvos: {scaler_path}')
 
 def weights_to_jsonable(weights):
-    # weights: list[dict] (cada item: layer info + arrays numpy)
     out = {}
     for w in weights:
         name = w["name"]
@@ -539,33 +451,25 @@ def weights_to_jsonable(weights):
 
 
 def main():
-    """Main training pipeline."""
     print('=' * 60)
     print(f'  LSTM Stock Price Predictor - Training Pipeline')
     print(f'  Symbol: {SYMBOL} | Period: {START_DATE} to {END_DATE}')
     print('=' * 60)
     print()
 
-    # Step 1: Download data
     df = download_data()
 
-   # Step 2: Prepare data
     X_train, X_val, X_test, y_train, y_val, y_test, scaler, dates_test = prepare_data_no_leakage(df)
 
-    # Step 3: Build model
     model = build_model()
 
-    # Step 4: Train model
     history = train_model(model, X_train, y_train, X_val, y_val)
     plot_training_curves(history, out_dir=DATA_DIR, prefix="exp1_petr4_d1")
 
-    # Step 5: Evaluate model
     metrics = evaluate_model(model, X_test, y_test, scaler, dates_test)
 
-    # Step 6: Extract weights
     weights = extract_weights(model)
 
-    # Step 7: Save everything
     save_artifacts(df, weights, scaler, metrics)
 
     print()

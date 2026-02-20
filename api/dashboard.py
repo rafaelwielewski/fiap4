@@ -1,17 +1,3 @@
-"""
-Dashboard de monitoramento Streamlit para a Stock Price Prediction API.
-
-Páginas:
-- Overview: status da API, info do modelo LSTM, dados da ação
-- API Metrics: total de requests, tempo médio, taxa de erros, gráficos
-- Performance: distribuição de response time, performance por endpoint
-- Predições: interface para testar predições com gráficos
-- Real-time Logs: visualização dos logs recentes
-
-Uso:
-    poetry run streamlit run api/dashboard.py --server.port 8501
-"""
-
 import os
 
 import pandas as pd
@@ -23,19 +9,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configuração da página
 st.set_page_config(
     page_title='Stock Prediction - Dashboard',
     page_icon='📈',
     layout='wide',
 )
 
-# URL base da API
 API_BASE_URL = os.getenv('BASE_URL', 'http://localhost:8081')
 
 
 def fetch_api_data(endpoint, method='GET', json_body=None):
-    """Busca dados de um endpoint da API."""
     try:
         url = f'{API_BASE_URL}{endpoint}'
         if method == 'POST':
@@ -60,7 +43,6 @@ def main():
     st.title('📈 Stock Prediction - Dashboard de Monitoramento')
     st.markdown('---')
 
-    # Sidebar
     st.sidebar.title('Navegação')
     page = st.sidebar.selectbox(
         'Escolha uma página',
@@ -82,12 +64,10 @@ def main():
 def show_overview():
     st.header('📊 Overview')
 
-    # Health check
     health_data = fetch_api_data('/api/v1/health')
     model_data = fetch_api_data('/api/v1/predictions/model-info')
     metrics_data = fetch_api_data('/api/v1/analytics/metrics')
 
-    # Status cards
     col1, col2, col3, col4 = st.columns(4)
 
     if health_data:
@@ -114,7 +94,6 @@ def show_overview():
             
         currency = 'R$' if symbol.endswith('.SA') else '$'
 
-    # Métricas do modelo
     if model_data and model_data.get('metrics'):
         st.subheader('🤖 Métricas do Modelo LSTM')
         metrics = model_data['metrics']
@@ -123,7 +102,6 @@ def show_overview():
 
         col1, col2, col3, col4 = st.columns(4)
         
-        # Format metrics
         mape = metrics.get('mape', 0)
         dir_acc = metrics.get('directional_accuracy', 0)
         
@@ -146,9 +124,8 @@ def show_overview():
             st.markdown("### 📉 Comparação com Baselines")
             naive = baselines.get('naive', {})
             sma = list(baselines.keys())[-1] if len(baselines) > 1 else 'sma' 
-            sma_data = baselines.get(sma, {}) if sma != 'naive' else {} # simple heuristic
-            
-            # If sma key is like "sma_60", use it
+            sma_data = baselines.get(sma, {}) if sma != 'naive' else {}
+
             for k in baselines:
                 if k.startswith('sma'):
                     sma_data = baselines[k]
@@ -165,7 +142,6 @@ def show_overview():
                 st.metric(f"{sma.upper()} MAPE", f"{sma_data.get('mape_price_pct', 0):.2f}%",
                          delta=f"{sma_data.get('mape_price_pct', 0) - mape:.2f}%")
 
-        # Arquitetura do modelo
         st.subheader('🏗️ Arquitetura do Modelo')
         training_period = model_data.get('training_period', {})
         last_trained = model_data.get('last_trained', '')
@@ -187,7 +163,6 @@ def show_overview():
             - **Treinado em:** {last_trained[:10] if last_trained else 'N/A'}
             """)
 
-    # Resumo de atividade
     if metrics_data:
         st.subheader('📋 Resumo de Atividade')
         col1, col2, col3 = st.columns(3)
@@ -198,7 +173,6 @@ def show_overview():
         with col3:
             st.metric('Taxa de Erros', f"{metrics_data.get('error_rate', 0):.2f}%")
 
-    # Dados históricos recentes
     st.subheader('📈 Dados Recentes da Ação')
     stock_data = fetch_api_data('/api/v1/stocks/latest?n=60')
     if stock_data and isinstance(stock_data, list) and len(stock_data) > 0:
@@ -230,7 +204,6 @@ def show_api_metrics():
         st.warning('Sem dados de métricas. Faça algumas requisições à API primeiro.')
         return
 
-    # KPIs
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric('Total de Requests', analytics_data.get('total_requests', 0))
@@ -239,10 +212,8 @@ def show_api_metrics():
     with col3:
         st.metric('Taxa de Erros', f"{analytics_data.get('error_rate', 0):.2f}%")
 
-    # Gráficos lado a lado
     col1, col2 = st.columns(2)
 
-    # Requests por endpoint
     if analytics_data.get('requests_by_endpoint'):
         with col1:
             st.subheader('📈 Requests por Endpoint')
@@ -258,7 +229,6 @@ def show_api_metrics():
             fig.update_layout(template='plotly_dark', showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
 
-    # Requests por método HTTP
     if analytics_data.get('requests_by_method'):
         with col2:
             st.subheader('🔧 Requests por Método HTTP')
@@ -272,7 +242,6 @@ def show_api_metrics():
             fig.update_layout(template='plotly_dark')
             st.plotly_chart(fig, use_container_width=True)
 
-    # Requests por status code
     if analytics_data.get('requests_by_status'):
         st.subheader('📊 Requests por Status Code')
         status_data = analytics_data['requests_by_status']
@@ -287,7 +256,6 @@ def show_api_metrics():
         fig.update_layout(template='plotly_dark')
         st.plotly_chart(fig, use_container_width=True)
 
-    # Atividade recente
     if analytics_data.get('recent_activity'):
         st.subheader('📋 Atividade Recente')
         recent_df = pd.DataFrame(analytics_data['recent_activity'])
@@ -305,7 +273,6 @@ def show_performance():
         st.warning('Sem dados de performance. Faça algumas requisições à API primeiro.')
         return
 
-    # System health
     if performance_data.get('system_health'):
         st.subheader('🏥 Saúde do Sistema')
         health = performance_data['system_health']
@@ -320,7 +287,6 @@ def show_performance():
         with col4:
             st.metric('Taxa de Sucesso', f"{health.get('success_rate', 0):.1f}%")
 
-    # Response time distribution
     if performance_data.get('response_time_distribution'):
         st.subheader('⏱️ Distribuição de Tempo de Resposta')
         rt_dist = performance_data['response_time_distribution']
@@ -337,7 +303,6 @@ def show_performance():
         with col5:
             st.metric('P99', f"{rt_dist.get('p99', 0):.2f}ms")
 
-    # Endpoint performance
     if performance_data.get('endpoint_performance'):
         st.subheader('🎯 Performance por Endpoint')
         endpoint_perf = performance_data['endpoint_performance']
@@ -367,10 +332,8 @@ def show_performance():
             fig.update_layout(template='plotly_dark')
             st.plotly_chart(fig, use_container_width=True)
 
-            # Tabela detalhada
             st.dataframe(perf_df, use_container_width=True)
 
-    # Error breakdown
     if performance_data.get('error_breakdown'):
         st.subheader('❌ Breakdown de Erros')
         error_data = performance_data['error_breakdown']
@@ -418,7 +381,6 @@ def show_predictions():
             st.subheader('📋 Dados da Predição')
             st.dataframe(pd.DataFrame([prediction]), use_container_width=True)
 
-    # Info do modelo
     st.markdown('---')
     st.subheader('ℹ️ Informações do Modelo')
     model_info = fetch_api_data('/api/v1/predictions/model-info')
@@ -439,7 +401,6 @@ def show_predictions():
 def show_realtime_logs():
     st.header('📝 Real-time Logs')
 
-    # Logs do arquivo
     log_file = 'logs/api.log'
 
     if os.path.exists(log_file):
@@ -458,7 +419,6 @@ def show_realtime_logs():
         else:
             st.info('Nenhuma entrada de log encontrada.')
 
-        # Estatísticas de log
         st.subheader('📊 Estatísticas de Log')
 
         api_calls = [line for line in lines if 'API_CALL:' in line]

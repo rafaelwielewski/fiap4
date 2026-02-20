@@ -5,9 +5,6 @@ from pydantic import ValidationError
 
 
 async def validation_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """
-    Handler for Pydantic ValidationError exceptions
-    """
     if isinstance(exc, ValidationError):
         return JSONResponse(
             status_code=422,
@@ -29,9 +26,6 @@ async def validation_error_handler(request: Request, exc: Exception) -> JSONResp
 
 
 async def request_validation_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """
-    Handler for FastAPI RequestValidationError exceptions
-    """
     if isinstance(exc, RequestValidationError):
         return JSONResponse(
             status_code=422,

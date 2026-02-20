@@ -21,7 +21,6 @@ app = FastAPI(
                 'Projeto FIAP - Tech Challenge Fase 4.'
 )
 
-# Add performance monitoring middleware
 app.add_middleware(PerformanceMiddleware)
 
 app.add_middleware(
@@ -43,9 +42,6 @@ app.add_exception_handler(RequestValidationError, request_validation_error_handl
 
 @app.get('/')
 def root():
-    """
-    Root endpoint that returns API information.
-    """
     return {
         'message': 'Stock Price Prediction API - FIAP Tech Challenge Fase 4',
         'docs': '/docs',

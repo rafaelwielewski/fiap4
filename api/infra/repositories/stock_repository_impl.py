@@ -11,7 +11,6 @@ SYMBOL = 'AAPL'
 
 
 class StockRepositoryImpl(StockRepository):
-    """Repository implementation for stock data operations."""
 
     def __init__(self):
         self.csv_path = os.path.join('data', 'stock_data.csv')
@@ -27,7 +26,6 @@ class StockRepositoryImpl(StockRepository):
         )
 
     def _get_dataframe(self) -> pd.DataFrame:
-        """Load stock data from CSV file."""
         if not os.path.exists(self.csv_path):
             raise HTTPException(status_code=500, detail='Arquivo de dados não encontrado')
 
@@ -41,7 +39,6 @@ class StockRepositoryImpl(StockRepository):
             ) from e
 
     def get_stock_history(self) -> list[StockData]:
-        """Get full stock history data."""
         df = self._get_dataframe()
         data = []
 
@@ -51,7 +48,6 @@ class StockRepositoryImpl(StockRepository):
         return data
 
     def get_latest_data(self, n: int = 60) -> list[StockData]:
-        """Get the latest N trading days from yfinance."""
         try:
             raw = yf.download(SYMBOL, period=f'{n + 10}d', auto_adjust=True, progress=False)
             if isinstance(raw.columns, pd.MultiIndex):

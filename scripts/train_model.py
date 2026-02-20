@@ -138,20 +138,13 @@ def directional_accuracy_price(true_price, pred_price, close_t):
 print(f"Downloading {SYMBOL}...")
 df = yf.download(SYMBOL, start=START_DATE, end=END_DATE)
 
-# Clean data: remove rows with 0 or NaN
 df = df.dropna()
 col_check = ["Open", "High", "Low", "Close", "Volume"]
-# Handle MultiIndex if present
 if isinstance(df.columns, pd.MultiIndex):
-    # Check if we can flatten or just access via level
-    pass # Flattening happens in save_artifacts logic usually, but here we work with raw df
-    
-# Simple cleaning: if any row has 0 in OHLC, drop it
-# Accessing columns securely considering yfinance structures
+    pass
+
 try:
-    # If MultiIndex with Ticker
     mask = (df["Close"] > 0) & (df["Open"] > 0) & (df["High"] > 0) & (df["Low"] > 0)
-    # If it's a series or dataframe, ensure we get a boolean series for indexing
     if isinstance(mask, pd.DataFrame):
         mask = mask.iloc[:, 0]
     df = df[mask]
@@ -351,7 +344,6 @@ model.save(ARTIFACTS_DIR / "final_model.keras")
 joblib.dump(scaler_X, ARTIFACTS_DIR / "scaler_X.joblib")
 joblib.dump(scaler_y, ARTIFACTS_DIR / "scaler_y.joblib")
 
-# Save stock data CSV for the API stock repository
 csv_path = DATA_DIR / "stock_data.csv"
 df_save = df.copy()
 if isinstance(df_save.columns, pd.MultiIndex):

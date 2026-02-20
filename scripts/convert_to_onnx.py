@@ -20,24 +20,15 @@ def convert_to_onnx():
     if os.path.exists(saved_model_dir):
         shutil.rmtree(saved_model_dir)
     
-    # Keras 3 export to SavedModel
-    model.export(saved_model_dir) 
-    # OR tf.saved_model.save(model, saved_model_dir) if model.export doesn't exist.
-    # Keras 3 has model.export() for EF serving deployment.
+    model.export(saved_model_dir)
 
     print("Converting SavedModel to ONNX...")
-    # Use python -m tf2onnx.convert logic internally
-    # We can use the python API
-    
-    # We need to run this as a subprocess or via module because from_saved_model is easier via CLI?
-    # Let's try module API
     command = f"python -m tf2onnx.convert --saved-model {saved_model_dir} --output {onnx_model_path} --opset 13"
     print(f"Running: {command}")
     exit_code = os.system(command)
     
     if exit_code == 0:
         print("Conversion successful!")
-        # Clean up
         shutil.rmtree(saved_model_dir)
     else:
         print("Conversion failed!")

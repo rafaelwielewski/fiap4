@@ -1,8 +1,3 @@
-"""
-Serviço de analytics que processa logs do logger global
-e calcula métricas agregadas para o dashboard de monitoramento.
-"""
-
 import json
 import statistics
 from collections import Counter
@@ -12,10 +7,8 @@ from api.utils.logger import logger
 
 
 class AnalyticsService:
-    """Processa logs em memória e calcula métricas de performance da API."""
 
     def _get_request_logs(self) -> List[Dict[str, Any]]:
-        """Extrai logs de requisições (API_CALL) do logger."""
         all_logs = logger.get_logs()
         request_logs = []
         for log in all_logs:
@@ -24,7 +17,6 @@ class AnalyticsService:
         return request_logs
 
     def _get_error_logs(self) -> List[Dict[str, Any]]:
-        """Extrai logs de erros do logger."""
         all_logs = logger.get_logs(level='ERROR')
         error_logs = []
         for log in all_logs:
@@ -33,39 +25,31 @@ class AnalyticsService:
         return error_logs
 
     def get_metrics(self) -> Dict[str, Any]:
-        """Calcula métricas gerais da API."""
         request_logs = self._get_request_logs()
         error_logs = self._get_error_logs()
 
         total_requests = len(request_logs)
         total_errors = len(error_logs)
 
-        # Tempo médio de resposta
         durations = [r['duration_ms'] for r in request_logs if 'duration_ms' in r]
         avg_response_time = statistics.mean(durations) if durations else 0
 
-        # Taxa de erros
         error_rate = (total_errors / total_requests * 100) if total_requests > 0 else 0
 
-        # Requests por endpoint
         endpoint_counter = Counter(r.get('path', 'unknown') for r in request_logs)
         requests_by_endpoint = dict(endpoint_counter.most_common())
 
-        # Requests por método HTTP
         method_counter = Counter(r.get('method', 'unknown') for r in request_logs)
         requests_by_method = dict(method_counter.most_common())
 
-        # Requests por status code
         status_counter = Counter(r.get('status_code', 0) for r in request_logs)
         requests_by_status = {str(k): v for k, v in status_counter.most_common()}
 
-        # Top endpoints
         top_endpoints = [
             {'endpoint': endpoint, 'count': count}
             for endpoint, count in endpoint_counter.most_common(10)
         ]
 
-        # Atividade recente (últimas 20)
         recent_activity = sorted(
             request_logs, key=lambda x: x.get('timestamp', ''), reverse=True
         )[:20]
@@ -83,14 +67,12 @@ class AnalyticsService:
         }
 
     def get_performance(self) -> Dict[str, Any]:
-        """Calcula métricas detalhadas de performance."""
         request_logs = self._get_request_logs()
         error_logs = self._get_error_logs()
 
         total_requests = len(request_logs)
         total_errors = len(error_logs)
 
-        # Distribuição de response time
         durations = sorted([r['duration_ms'] for r in request_logs if 'duration_ms' in r])
         rt_distribution = {}
         if durations:
@@ -103,7 +85,6 @@ class AnalyticsService:
                 'p99': round(durations[int(len(durations) * 0.99)] if len(durations) > 1 else durations[0], 2),
             }
 
-        # Performance por endpoint
         endpoint_perf = {}
         for r in request_logs:
             path = r.get('path', 'unknown')
@@ -123,11 +104,9 @@ class AnalyticsService:
                 'max_response_time': round(max(durs), 2),
             }
 
-        # Error breakdown
         error_counter = Counter(e.get('error_type', 'unknown') for e in error_logs)
         error_breakdown = dict(error_counter.most_common())
 
-        # System health
         success_count = total_requests - total_errors
         success_rate = (success_count / total_requests * 100) if total_requests > 0 else 100
 
